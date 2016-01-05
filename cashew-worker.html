@@ -38,7 +38,7 @@
     (function() {
       var oldLog = console.log;
       console.log = function(message){
-        outputText.innerHTML += (message + '\n');
+        outputText.textContent += (message + '\n');
         oldLog.apply(console, arguments);
       };
     })();
@@ -72,11 +72,31 @@
 </head>
 <body>
   <button class="btn-parser" onclick='submitCode()'>Parse it!</button>
-  <div id="codeArea">public class MyClass {
+  <div id="codeArea">public class ListsClass {
     /** main method */
     public static void main(String[] args)
     {
-      System.out.println("Type your code here");
+      List&#60Integer&#62 listInt = new ArrayList&#60Integer&#62();
+      listInt.add(5);
+      listInt.add(15);
+      int five = listInt.get(0); //returns 5, autocast to primitive int
+      listInt.set(0, 10);
+      System.out.println(five);
+
+      //enhanced foor loop (for each)
+      // for(Integer i : listInt){
+      //   System.out.println(i);
+      // }
+      // listInt.remove(0);
+      System.out.println(listInt.size());  //size 1
+
+      // ArrayList&#60String&#62 bandas = new ArrayList&#60String&#62();
+      // or
+      // List&#60String&#62 bandas = new ArrayList&#60String&#62();
+      
+      // bandas.add("Foo Fighters!");
+      // System.out.println(bandas.get(0));
+
     }
   }
   </div>
@@ -90,6 +110,7 @@
     editor.setTheme("ace/theme/github");
     editor.getSession().setTabSize(2);
     editor.getSession().setMode("ace/mode/java");
+    editor.$blockScrolling = Infinity;
 
     var jseditor = ace.edit("jsText");
     jseditor.setTheme("ace/theme/textmate");

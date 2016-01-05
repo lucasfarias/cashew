@@ -888,6 +888,35 @@ exports.Cashew = function(javaCode){
 		return ifElseNode;
 	}
 
+	var createSimpleListNode = parser.yy.createSimpleListNode = function createSimpleListNode(varName, varRange, range){
+		var simpleList = new node("VariableDeclarator");
+		simpleList.range = range;
+
+		var idNode = createIdentifierNode(varName, varRange);
+		simpleList.id = idNode;
+
+		var nodeList = new node("ExpressionStatement");
+		simpleList.init = nodeList;
+
+		return simpleList;
+	}
+
+	parser.yy.createListWithInitNode = function createListWithInitNode(varName, varRange, initNode, range){
+		var nullList = createSimpleListNode(varName, varRange, range);
+		nullList.init = initNode;
+		return nullList;
+	}
+
+	var createListInitialization = parser.yy.createListInitialization = function createListInitialization(nodeExp, range){
+		var nodeList = new node("ExpressionStatement")
+		nodeList.type = "NewExpression";
+		callee = new node("Identifier")
+		callee.name = "_ArrayList"
+		nodeList.callee = callee;
+		console.log(nodeList);
+		return nodeList;
+	}
+
 	var createSimpleArrayNode = parser.yy.createSimpleArrayNode = function createSimpleArrayNode(varName, varRange, range){
 		var simpleArray = new node("VariableDeclarator");
 		simpleArray.range = range;
@@ -903,7 +932,7 @@ exports.Cashew = function(javaCode){
 	}
 
 	parser.yy.createArrayWithInitNode = function createArrayWithInitNode(varName, varRange, initNode, range){
-		var nullArray = createSimpleArrayNode(varName, varRange,range);
+		var nullArray = createSimpleArrayNode(varName, varRange, range);
 		nullArray.init = initNode;
 		return nullArray;
 	}
@@ -957,6 +986,13 @@ exports.Cashew = function(javaCode){
 				throw TypeError("Invalid type for " + type);
 			}
 		});
+	}
+
+	parser.yy.validateArrayListTypes = function validateArrayListTypes(declaratorType, expressionType){
+		// compare types
+		if(declaratorType != expressionType){
+			throw TypeError("Invalid type for " + expressionType);
+		}
 	}
 
 	parser.yy.createArrayFromInitialArray = function createArrayFromInitialArray(arrays, range){
@@ -1210,6 +1246,30 @@ exports.toNode = function(p){
   function node(){}
 }
 
+_ArrayList.prototype = new Object();
+_ArrayList.prototype.constructor = _ArrayList;
+function _ArrayList(){}; 
+_ArrayList.prototype.type = "_ArrayList";
+
+_ArrayList.prototype.size = function(){
+	console.log(this);
+	return Object.keys(this).length;
+};
+
+_ArrayList.prototype.add = function(el){
+  this[this.size()] = el;
+};
+
+_ArrayList.prototype.set = function(index, el){
+	if (this[index] != undefined){
+		this[index] = el;
+	} else { throw new SyntaxError("Array index out of bounds"); }
+};
+
+_ArrayList.prototype.get = function(index){
+	return this[index];
+};
+
 _Object = (function() {
 
 	var id = 0;
@@ -1236,14 +1296,13 @@ _Object = (function() {
 		return this === other;
 	};
 
-	_Object.prototype.toString= function() {
+	_Object.prototype.toString = function() {
 		return this.constructor.name + "@" + this.id;
 	};
 
 	return _Object;
 
 })();
-
 
 exports.___JavaRuntime = { 
 	extend : function(child, parent) { 
@@ -1262,6 +1321,7 @@ exports.___JavaRuntime = {
 	},
 
  	_Object : _Object,
+ 	_ArrayList : _ArrayList,
 
 	functions : {
 		print: function(str){
