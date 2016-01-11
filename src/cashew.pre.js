@@ -907,14 +907,14 @@ exports.Cashew = function(javaCode){
 		return nullList;
 	}
 
-	var createListInitialization = parser.yy.createListInitialization = function createListInitialization(nodeExp, range){
-		var nodeList = new node("ExpressionStatement")
-		nodeList.type = "NewExpression";
-		callee = new node("Identifier")
-		callee.name = "_ArrayList"
-		nodeList.callee = callee;
-		console.log(nodeList);
-		return nodeList;
+	var createListInitialization = parser.yy.createListInitialization = function createListInitialization(nodeType, range){
+		var newExpressionNode = new node("NewExpression");
+		newExpressionNode.range = range;
+		var newExpressionNodecallee = createMemberExpressionNode(createIdentifierNode("___JavaRuntime", range),createIdentifierNode("_ArrayList", range), range);
+		newExpressionNode.callee = newExpressionNodecallee;
+		newExpressionNode.arguments = [];
+		newExpressionNode.arguments.push(getArgumentForName(nodeType, range));
+		return newExpressionNode;
 	}
 
 	var createSimpleArrayNode = parser.yy.createSimpleArrayNode = function createSimpleArrayNode(varName, varRange, range){
@@ -1246,30 +1246,6 @@ exports.toNode = function(p){
   function node(){}
 }
 
-_ArrayList.prototype = new Object();
-_ArrayList.prototype.constructor = _ArrayList;
-function _ArrayList(){}; 
-_ArrayList.prototype.type = "_ArrayList";
-
-_ArrayList.prototype.size = function(){
-	console.log(this);
-	return Object.keys(this).length;
-};
-
-_ArrayList.prototype.add = function(el){
-  this[this.size()] = el;
-};
-
-_ArrayList.prototype.set = function(index, el){
-	if (this[index] != undefined){
-		this[index] = el;
-	} else { throw new SyntaxError("Array index out of bounds"); }
-};
-
-_ArrayList.prototype.get = function(index){
-	return this[index];
-};
-
 _Object = (function() {
 
 	var id = 0;
@@ -1301,6 +1277,65 @@ _Object = (function() {
 	};
 
 	return _Object;
+
+})();
+
+_ArrayList = (function() {
+
+  function _ArrayList(type) {
+    this.type = type;
+    this.arraylist = [];
+  }
+
+  _ArrayList.prototype.size = function() {
+    return this.arraylist.length;
+  };
+
+  _ArrayList.prototype.add = function(index, object) {
+  	//hacky way so we can have method overload
+    if (object == undefined) {
+      //todo("validate type");
+      this.arraylist.push(index);
+      return true;
+    } else {
+      if (index > 0 && index < this.arraylist.length) {
+        //todo("fixthis");
+        this.arraylist[index] = object;
+        return true;
+      } else {
+        throw new SyntaxError("Index out of bounds Exception");
+      }
+    }
+  };
+
+  _ArrayList.prototype.get = function(index) {
+    if (index < 0 || index > this.arraylist.length) {
+      throw new SyntaxError("Index out of bounds Exception");
+    }
+    return this.arraylist[index];
+  };
+
+  _ArrayList.prototype.set = function(index, object) {
+    var old;
+    if (index < 0 || index > this.arraylist.length) {
+      throw new SyntaxError("Index out of bounds Exception");
+    }
+    var old = this.arraylist[index];
+    //todo("validate type");
+    this.arraylist[index] = object;
+    return old;
+  };
+
+  _ArrayList.prototype.remove = function(index) {
+    if (index < 0 || index > this.arraylist.length) {
+      throw new SyntaxError("Index out of bounds Exception");
+    }
+    //todo("do the index subtraction");
+
+    return this.arraylist[index];
+  };
+
+  return _ArrayList;
 
 })();
 

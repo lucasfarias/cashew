@@ -527,8 +527,8 @@ floating_point_type
     {}
   ;
 
-generic_type
-  : KEYWORD_ARRAYLIST // OPERATOR_LESS_THAN type OPERATOR_GREATER_THAN
+list_type
+  : KEYWORD_ARRAYLIST
     {}
   | KEYWORD_LIST
     {}
@@ -780,7 +780,7 @@ variable_declaration
       yy.validateDeclaratorsDimension($4, $1);
       $$ = yy.createVarDeclarationNode($1 + $2 + $3, $4, @$.range);
     }
-  | generic_type OPERATOR_LESS_THAN type OPERATOR_GREATER_THAN arraylist_declarator
+  | list_type OPERATOR_LESS_THAN type OPERATOR_GREATER_THAN arraylist_declarator
     {
       // TODO: yy.validateArrayListTypes($3, $5);
       $$ = yy.createVarDeclarationNode($3, $5, @$.range);
@@ -907,9 +907,9 @@ array_expression
   ;
 
 arraylist_expression
-  : KEYWORD_NEW generic_type OPERATOR_LESS_THAN type OPERATOR_GREATER_THAN LEFT_PAREN RIGHT_PAREN
+  : KEYWORD_NEW list_type OPERATOR_LESS_THAN type OPERATOR_GREATER_THAN LEFT_PAREN RIGHT_PAREN
     { 
-      $$ = yy.createListInitialization(0, @$.range);
+      $$ = yy.createListInitialization($4, @$.range);
     }
   ;
 
