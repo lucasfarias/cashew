@@ -23,16 +23,15 @@
 var methodsDictionary;
 var mainMethodCall;
 
-exports.Cashew = function(javaCode){
-	
-	___JavaRuntime.variablesDictionary = [];
+exports.Parse = function(javaCode){
+
+	___JavaRuntime.sourceCode = javaCode;
 	methodsDictionary = [];
-	constructorBodyNodes = undefined;
-	constructorParams = undefined;
+	constructorBodyNodes = [];
 	mainMethodCall = undefined;
 	
 	//parser helpers
-	parser.yy._ = _;
+	cocoJava.yy._ = _;
 
 	function getRuntimeFunctions(range){
 		var functions = new node("MemberExpression");
@@ -74,6 +73,15 @@ exports.Cashew = function(javaCode){
 		return createLiteralNode(name, "\""+name + "\"", range);
 	}
 
+	getArgumentForRange = function(range){
+		var rangeNode = new node("ArrayExpression");
+		rangeNode.range = [0,0];
+		rangeNode.elements = [];
+		rangeNode.elements.push(getArgumentForNumber(range[0], [0,0]));
+		rangeNode.elements.push(getArgumentForNumber(range[1], [0,0]));
+		return rangeNode;
+	}
+
 	getArgumentForVariable = function(name, range){
 		return createIdentifierNode(name, range);
 	}
@@ -102,7 +110,7 @@ exports.Cashew = function(javaCode){
 		varEntryId += 1;
 	}
 
-	parser.yy.createMethodSignatureObject = function createMethodSignatureObject(methodIdentifier, methodSignature, params, range){
+	cocoJava.yy.createMethodSignatureObject = function createMethodSignatureObject(methodIdentifier, methodSignature, params, range){
 		var methodSignatureObject = {
 			'methodName' : methodIdentifier,
 			'methodSignature' : methodSignature,
@@ -114,7 +122,6 @@ exports.Cashew = function(javaCode){
 		}
 		return methodSignatureObject;
 	}
-
 
 	// auxiliary functions
 
@@ -241,11 +248,15 @@ exports.Cashew = function(javaCode){
 	     	}
 	     }
 
+	  	env = {"type":"ExpressionStatement","expression":{"type":"CallExpression","callee":{"type":"MemberExpression","computed":false,"object":{"type":"Identifier","name":"___JavaRuntime"},"property":{"type":"Identifier","name":"loadEnv"}},"arguments":[]}};
+        //insert the script that load some variables to the environment
+		this.rootNode.body.unshift(env);
+		
 	     return this.rootNode;
 	    }
 
 	  };
-	parser.yy.ast = ast;
+	cocoJava.yy.ast = ast;
 
 	node = function(type){
 		ASTNodeID += 1;
@@ -274,21 +285,32 @@ exports.Cashew = function(javaCode){
 		});
 	}
 
-	var createLiteralNode = parser.yy.createLiteralNode = function createLiteralNode(value, raw, range){
-		var literalNode = new node("Literal");
-		literalNode.range = range;
-		literalNode.value = value;
-		literalNode.raw = ""+raw;
-		return literalNode;
+	var createLiteralNode = cocoJava.yy.createLiteralNode = function createLiteralNode(value, raw, range, javaType){
+		if(javaType){
+			var expression = new node("CallExpression");
+			expression.range = range;
+			expression.callee = createMemberExpressionNode(getRuntimeFunctions(range), createIdentifierNode("createNumber",range), range);
+			expression.arguments = [];
+			expression.arguments.push(getArgumentForNumber(value, range));
+			expression.arguments.push(getArgumentForName(javaType,range));
+			return expression;
+		}else{
+			var literalNode = new node("Literal");
+			literalNode.range = range;
+			literalNode.value = value;
+			literalNode.raw = ""+raw;
+			return literalNode;
+		}
 	}
 
-	var createIdentifierNode = parser.yy.createIdentifierNode = function createIdentifierNode(name, range){
+	var createIdentifierNode = cocoJava.yy.createIdentifierNode = function createIdentifierNode(name, range){
 		var identifierNode = new node("Identifier");
 		identifierNode.range = range;
 		identifierNode.name = name;
 		return identifierNode;
 	}
-	var createArrayIdentifierNode = parser.yy.createArrayIdentifierNode = function createArrayIdentifierNode(varName, varRange, index1Node, index1Range, index2Node, index2Range, range){
+
+	var createArrayIdentifierNode = cocoJava.yy.createArrayIdentifierNode = function createArrayIdentifierNode(varName, varRange, index1Node, index1Range, index2Node, index2Range, range){
 		var identifierNode = createMemberExpressionNode(createIdentifierNode(varName, varRange), index1Node, index1Range, true);
 		if(index2Node){
 			identifierNode = createMemberExpressionNode(identifierNode, index2Node, index2Range, true);
@@ -305,54 +327,11 @@ exports.Cashew = function(javaCode){
 		return memberExpressionNode;
 	}
 
-
-	//FIXME disabling validations for now
-	var createUpdateClassVariableReference = parser.yy.createUpdateClassVariableReference = function createUpdateClassVariableReference(variableNodes, className, block){
-		/*_.each(variableNodes, function(variableNode){
-			_.each(variableNode.declarations, function(varNode){
-				var newVar = new variableEntry(varNode.id.name, "", variableNode.javaType, 
-					"class", className, "", variableNode.ASTNodeID);
-				findUpdateChildren(block, newVar);
-				___JavaRuntime.variablesDictionary.push(newVar);
-			});
-		});*/
-	}
-
-	parser.yy.createUpdateMethodVariableReference = function createUpdateMethodVariableReference(variableNodes, methodProperties, block){
-		/*_.each(variableNodes, function(variableNode){
-			var newVar = new variableEntry(variableNode.declarations[0].id.name, "", variableNode.javaType, 
-				"method", "", methodProperties.methodSignature, variableNode.ASTNodeID);
-			findUpdateChildren(block, newVar);
-			___JavaRuntime.variablesDictionary.push(newVar);
-		});*/
-	}
-
-	createUpdateParamVariableReference = function createUpdateParamVariableReference(paramNodes, methodProperties, block){
-		/*_.each(paramNodes, function(paramNode){
-			var newVar = new variableEntry(paramNode.name, "", paramNode.javaType, 
-				"method", "", methodProperties.methodSignature, paramNode.ASTNodeID);
-			findUpdateChildren(block, newVar);
-			findUpdateChildren(paramNodes, newVar);
-			___JavaRuntime.variablesDictionary.push(newVar);
-		});*/
-	}
-
-	parser.yy.createUpdateBlockVariableReference = function createUpdateBlockVariableReference(variableNodes, block){
-		/*_.each(variableNodes, function(variableNode){
-			_.each(variableNode.declarations, function(varNode){
-				var newVar = new variableEntry(varNode.id.name, "", variableNode.javaType, 
-					"", "", "", variableNode.ASTNodeID);
-				findUpdateChildren(block, newVar);
-				___JavaRuntime.variablesDictionary.push(newVar);
-			});
-		});*/
-	}
-
-	parser.yy.createMethodDeclarationNode = function createMethodDeclarationNode(methodSignatureObject, headerRange, methodBodyNodes, methodBodyRange, range){
+	var createMethodDeclarationNode = cocoJava.yy.createMethodDeclarationNode = function createMethodDeclarationNode(methodSignatureObject, headerRange, methodBodyNodes, methodBodyRange, range){
 		if(methodSignatureObject.returnType == 'void'){
 			_.each(methodBodyNodes , function(bodyNode){
 				if(bodyNode.type === "ReturnStatement"){
-					throw SyntaxError("Cannot return a value from method whose return type is void");
+					raise("Cannot return a value from method whose return type is void", range);
 				}
 			});
 		}
@@ -362,6 +341,21 @@ exports.Cashew = function(javaCode){
 				isStatic = true;
 			}
 		});
+		if(isStatic){
+			(function refCheck(ast){
+				for (var k in ast) {
+				    if (typeof ast[k] == "object" && ast[k] !== null) {
+						var node = ast[k];
+						if(node.type !== undefined && node.type == 'Identifier' && node.name == '__ref'){
+							raise("Cannot reference this in a static context", node.range);
+						}
+						ast[k] = node;
+						ast[k] = refCheck(ast[k]);
+					}
+				}
+				return ast;
+			})(methodBodyNodes)
+		}
 
 		var isPrivate = true;
 		_.each(methodSignatureObject.modifiers, function(modifier){
@@ -406,7 +400,6 @@ exports.Cashew = function(javaCode){
 				newParam.javaType = param.type;
 				paramNodes.push(newParam);
 			});
-			createUpdateParamVariableReference(paramNodes, methodSignatureObject, methodBodyNodes);
 			functionDeclarationNodeAssignmentRight.params = paramNodes;
 		}
 		functionDeclarationNodeAssignmentRight.defaults = [];
@@ -437,17 +430,16 @@ exports.Cashew = function(javaCode){
 			functionDeclarationNodeAssignment.right = functionDeclarationNodeAssignmentStatic;
 		}
 
-
 		functionDeclarationNode.expression = functionDeclarationNodeAssignment;
-
+		functionDeclarationNode.details = methodSignatureObject;
 		return functionDeclarationNode;
 	}
 
-	parser.yy.createSimpleClassDeclarationNode = function createClassDeclarationNode(className, classNameRange, classBody, classBodyRange, range){
+	cocoJava.yy.createSimpleClassDeclarationNode = function createClassDeclarationNode(className, classNameRange, classBody, classBodyRange, range){
 		return createClassExtendedDeclarationNode(className, classNameRange, classBody, classBodyRange, null, null, range);
 	}
 	
-	var createClassExtendedDeclarationNode = parser.yy.createClassExtendedDeclarationNode = function createClassExtendedDeclarationNode(className, classNameRange, classBody, classBodyRange, extensionName, extensionRange, range){ 
+	var createClassExtendedDeclarationNode = cocoJava.yy.createClassExtendedDeclarationNode = function createClassExtendedDeclarationNode(className, classNameRange, classBody, classBodyRange, extensionName, extensionRange, range){ 
 		var classNode = new node("ExpressionStatement");
 		classNode.range = range;
 
@@ -458,46 +450,39 @@ exports.Cashew = function(javaCode){
 		classNodeExpression.operator = '=';
 		classNodeExpression.left = classNameId;
 
-		var classNodeExpressionRight = new node("CallExpression");
-		classNodeExpressionRight.range = range;
-
 		var classNodeExpressionRightCallee = new node("FunctionExpression");
 		classNodeExpressionRightCallee.range = range;
 		classNodeExpressionRightCallee.id = null;
 		classNodeExpressionRightCallee.params = [];
-		classNodeExpressionRightCallee.params.push(createIdentifierNode("superClass",range));
 		classNodeExpressionRightCallee.defaults = [];
 
 		var classNodeExpressionRightCalleeBody = new node("BlockStatement");
 		classNodeExpressionRightCalleeBody.range = classBodyRange;
 		classNodeExpressionRightCalleeBody.body = [];
 
-		//Does the extension
-		var extensionNode = new node("ExpressionStatement");
-		extensionNode.range = range;
+		//Init the __ref
 
-		var extensionNodeExpression = new node("CallExpression");
-		extensionNodeExpression.range = range;
+		classNodeExpressionRightCalleeBody.body.push({"type":"VariableDeclaration","declarations":[{"type":"VariableDeclarator","id":{"type":"Identifier","name":"__ref"},"init":{"type":"ObjectExpression","properties":[]}}],"kind":"var"});
 
-		var extensionNodeExpressionCallee = new node("MemberExpression");
-		extensionNodeExpressionCallee.range = range;
-		extensionNodeExpressionCallee.computed = false;
-		extensionNodeExpressionCallee.object = createIdentifierNode("___JavaRuntime", classNameRange);
-		extensionNodeExpressionCallee.property = createIdentifierNode("extend", classNameRange);
+		//Init the __funArr
 
-		extensionNodeExpression.callee = extensionNodeExpressionCallee;
+		classNodeExpressionRightCalleeBody.body.push({"type":"VariableDeclaration","declarations":[{"type":"VariableDeclarator","id":{"type":"Identifier","name":"__funArr"},"init":{"type":"ArrayExpression","elements":[]}}],"kind":"var"});
 
-		extensionNodeExpression.arguments = [];
-		extensionNodeExpression.arguments.push(classNameId);
-		extensionNodeExpression.arguments.push(createIdentifierNode("superClass", classNameRange));
+		//Extract variables from the class
+		var variableNodes = [];
+		_.each(classBody, function(fieldNode){
+			if(fieldNode.type == "VariableDeclaration"){
+				variableNodes.push(fieldNode);
+			}
+		});
+		//Insert the constructor
+		classNodeExpressionRightCalleeBody.body.push(createConstructorNode(className, constructorBodyNodes, classNameRange, [], extensionName));
+		//reset bodyNodes to next class
+		constructorBodyNodes = [];
 
-		extensionNode.expression = extensionNodeExpression;
-  
-        classNodeExpressionRightCalleeBody.body.push(extensionNode);
-
-        var typeNode = new node("ExpressionStatement");
+		var typeNode = new node("ExpressionStatement");
 		typeNode.range = range;
-        var memberExpressionVar = createMemberExpressionNode(classNameId, createIdentifierNode("__type", [0,0]), range);
+        var memberExpressionVar = createMemberExpressionNode(createMemberExpressionNode(createIdentifierNode(className, classNameRange), createIdentifierNode("prototype", classNameRange), classNameRange), createIdentifierNode("__type", [0,0]), range);
         var declarationNodeAssignment = new node("AssignmentExpression");
 				declarationNodeAssignment.range = classNameRange;
 				declarationNodeAssignment.operator = '=';
@@ -505,67 +490,51 @@ exports.Cashew = function(javaCode){
 				declarationNodeAssignment.right = getArgumentForName(className, classNameRange);
 		typeNode.expression = declarationNodeAssignment;
 
+		//Clone the prototype to extend
+		//MyClass.prototype = Object.create(_Object.prototype);
+		var extensionClass;
+		if(extensionName == null){
+			extensionClass = createIdentifierNode("_Object", classNameRange);
+		}else{
+			extensionClass = createIdentifierNode(extensionName, extensionRange);
+		}
+		var extensionProto = createMemberExpressionNode(extensionClass, createIdentifierNode("prototype",classNameRange) ,classNameRange);
+		var classProto = createMemberExpressionNode(createIdentifierNode(className, classNameRange), createIdentifierNode("prototype",classNameRange), classNameRange);
+
+		var assignmentProto = new node("AssignmentExpression");
+		assignmentProto.range = classNameRange;
+		assignmentProto.operator = "=";
+		assignmentProto.left = classProto;
+
+		var objectCreate = new node("CallExpression");
+		objectCreate.range = classNameRange;
+		objectCreate.callee = createMemberExpressionNode(createIdentifierNode("Object", [0,0]),createIdentifierNode("create", [0,0]), classNameRange);
+		objectCreate.arguments = [];
+		objectCreate.arguments.push(extensionProto);
+
+		assignmentProto.right = objectCreate;
+
+		classNodeExpressionRightCalleeBody.body.push(createExpressionStatementNode(assignmentProto, classNameRange));
+
 		//".class" = __type
 		classNodeExpressionRightCalleeBody.body.push(typeNode);
 
-		//Replaces __TemproaryClass in class body nodes and updates methods dictionary
-		replaceTemporaryClassWithClassName(classBody, className);
+		//Add field vars to the class
+		classNodeExpressionRightCalleeBody.body = classNodeExpressionRightCalleeBody.body.concat(variableNodes);
+		//Add Methods to the class
+		classNodeExpressionRightCalleeBody.body = classNodeExpressionRightCalleeBody.body.concat(createMethodOverload(classBody));
+		
+		//Replaces __TemporaryClass in class body nodes and updates methods dictionary
+		if(!extensionName){
+			extensionName = "_Object";
+		}
+		replaceTemporaryClassWithClassName(classNodeExpressionRightCalleeBody.body, className, extensionName);
+		specialReplacement(classNodeExpressionRightCalleeBody.body);
 		_.each(methodsDictionary, function(methodSignature){
 			if(methodSignature.clazz == "__TemporaryClassName"){
 				methodSignature.clazz = className;
 			}
 		});
-
-		//Extract variables from the class
-		var variableNodes = [];
-		_.each(classBody, function(fieldNode){
-			if(fieldNode.type == "ExpressionStatement" && fieldNode.expression.type == "SequenceExpression"){
-				if(!fieldNode.expression.isPrivate){
-					var constructorExpressions = [];
-					var staticExpressions = [];
-					_.each(fieldNode.expression.expressions, function(varNode){
-						var lastMember = varNode.right.right;
-						varNode.right.right = lastMember.left;
-						constructorExpressions.push(varNode);
-						lastMember.left.object.name = className;
-						staticExpressions.push(lastMember);
-					});
-					//JSON clone
-					variableNodes.push(JSON.parse(JSON.stringify(fieldNode)));
-					fieldNode.expression.expressions = staticExpressions;
-				}
-				else if(fieldNode.expression.isPrivate && fieldNode.expression.isStatic){
-					var constructorExpressions = [];
-					var staticExpressions = [];
-					_.each(fieldNode.expression.expressions, function(varNode){
-						var lastMember = varNode.right;
-						varNode.right = lastMember.left;
-						constructorExpressions.push(varNode);
-						lastMember.left.object.name = className;
-						staticExpressions.push(lastMember);
-					});
-					//JSON clone
-					variableNodes.push(JSON.parse(JSON.stringify(fieldNode)));
-					fieldNode.expression.expressions = staticExpressions;
-				}else{
-					var constructorExpressions = [];
-					_.each(fieldNode.expression.expressions, function(varNode){
-						var lastMember = varNode;
-						varNode = lastMember.left;
-						constructorExpressions.push(varNode);
-					});
-					//JSON clone
-					variableNodes.push(JSON.parse(JSON.stringify(fieldNode)));
-					fieldNode.expression.expressions = [];
-				}
-					
-			}
-		});
-		//Insert the constructor
-		classNodeExpressionRightCalleeBody.body.push(createConstructorNode(className, constructorBodyNodes, constructorParams, classNameRange, variableNodes));
-		
-		//Add Methods to the class
-		classNodeExpressionRightCalleeBody.body = classNodeExpressionRightCalleeBody.body.concat(classBody);
 
 		//Return the class
 		classNodeExpressionRightCalleeBody.body.push(createReturnStatementNode(createIdentifierNode(className, classNameRange), classNameRange));
@@ -574,34 +543,288 @@ exports.Cashew = function(javaCode){
 		classNodeExpressionRightCallee.generator = false;
 		classNodeExpressionRightCallee.expression = false;
 
-		classNodeExpressionRight.callee = classNodeExpressionRightCallee;
+		var extensionExpressionXp = new node("CallExpression");
+		extensionExpressionXp.range = range;
+		extensionExpressionXp.callee = createMemberExpressionNode(classNodeExpressionRightCallee, createIdentifierNode("call", range), range);
+		extensionExpressionXp.arguments = [];
+		var args = new node("ThisExpression");
+		args.range = range;
+		extensionExpressionXp.arguments.push(args);
 
-		classNodeExpressionRight.arguments = [];
-		var extensionClass;
-		if(extensionName == null){
-			extensionClass = createMemberExpressionNode(createIdentifierNode("___JavaRuntime", classNameRange),createIdentifierNode("_Object", classNameRange),classNameRange);
-		}else{
-			extensionClass = createIdentifierNode(extensionName, extensionRange);
-		}
 
-		classNodeExpressionRight.arguments.push(extensionClass);
-
-		classNodeExpression.right = classNodeExpressionRight;
+		classNodeExpression.right = extensionExpressionXp;
 
 		classNode.expression = classNodeExpression;
+
+
 		return classNode;
 	}
 
-	parser.yy.createOverrideDefaultConstructor = function createOverrideDefaultConstructor(modifiers, methodBodyNodes){
-		constructorBodyNodes = methodBodyNodes;
+	var createMethodOverload = function createMethodOverload(classBodyNodes){
+		var methodsWithOverload = [];
+		var nodesWithoutOverload = [];
+		var methodsWithOverloadDetails = [];
+		var methodWithOverloadFunctionNode = [];
+		for (var i = classBodyNodes.length - 1; i >= 0; i--) {
+			var methodOverload = false;
+			//determine if the node is a method
+			if(classBodyNodes[i].details){
+				var methodName = classBodyNodes[i].details.methodName;
+				//if the current overload is not in the array yet, map it!
+				if(methodsWithOverload.indexOf(methodName) == -1){
+					for (var j = classBodyNodes.length - 1; j >= 0; j--) {
+						//if its not the current Node and if it's not already in the overloaded methods
+						if(i != j){
+							//determine if the other node is a method
+							if(classBodyNodes[j].details){
+								//check if there's other methods with the same name
+								if(methodName == classBodyNodes[j].details.methodName){
+									methodOverload = true;
+									methodsWithOverload.push(methodName);
+									methodsWithOverloadDetails.push(classBodyNodes[j].details);
+									//get function definitions for the nodes overloaded
+									if(classBodyNodes[j].expression.right.type == "FunctionExpression"){
+										methodWithOverloadFunctionNode.push(classBodyNodes[j].expression.right);
+									}else if(classBodyNodes[j].expression.right.right.type == "FunctionExpression"){
+										methodWithOverloadFunctionNode.push(classBodyNodes[j].expression.right.right);
+									}else{
+										methodWithOverloadFunctionNode.push(classBodyNodes[j].expression.right.right.right);
+									}
+
+								}
+							}
+						}
+					}
+					//add the current to the overloaded pile
+					methodsWithOverload.push(methodName);
+					methodsWithOverloadDetails.push(classBodyNodes[i].details);
+					//get function definitions for the nodes overloaded
+					if(classBodyNodes[i].expression.right.type == "FunctionExpression"){
+						methodWithOverloadFunctionNode.push(classBodyNodes[i].expression.right);
+					}else if(classBodyNodes[i].expression.right.right.type == "FunctionExpression"){
+						methodWithOverloadFunctionNode.push(classBodyNodes[i].expression.right.right);
+					}else{
+						methodWithOverloadFunctionNode.push(classBodyNodes[i].expression.right.right.right);
+					}	
+				}
+			}
+		}
+		for (var i = 0; i < methodsWithOverload.length; i++) {
+			//check for duplicate sigatures in overloaded methods
+			currentSignature = methodsWithOverloadDetails[i].methodSignature;
+			for (var j = 0; j < methodsWithOverload.length; j++){
+				//if the current signature matches any signature raise an exception
+				if(i != j){
+					if (currentSignature == methodsWithOverloadDetails[j].methodSignature){
+						raise("Duplicated method signature " + currentSignature + "!", methodsWithOverloadDetails[j].range);
+					}
+				}
+			}
+		};
+		var grouped = [];
+		//Group all signatures in methods with overload
+		
+		for (var i = 0; i < methodsWithOverload.length; i++) {
+			//keep the original method name in details
+			methodsWithOverloadDetails[i].originalName = methodsWithOverload[i];
+			//rename the signatures and build new methods
+			if(!("_"+methodsWithOverload[i] in grouped)){
+				grouped["_"+methodsWithOverload[i]] = 0;
+			}else{
+				grouped["_"+methodsWithOverload[i]] = grouped["_"+methodsWithOverload[i]] + 1;
+			}
+			//Weird bug when method is toString
+			
+			methodsWithOverload[i] = "__" + methodsWithOverload[i] + grouped["_"+methodsWithOverload[i]];
+			var newExpressionStatement = new node("ExpressionStatement");
+			newExpressionStatement.range = methodsWithOverloadDetails[i].range;
+			newExpressionStatementAssign = new node("AssignmentExpression");
+			newExpressionStatementAssign.operator = "=";
+			newExpressionStatementAssign.range = methodsWithOverloadDetails[i].range;
+			newExpressionStatementAssign.left = createMemberExpressionNode(createIdentifierNode("__funArr", methodsWithOverloadDetails[i].range), getArgumentForName(methodsWithOverload[i], methodsWithOverloadDetails[i].range),methodsWithOverloadDetails[i].range, true);
+			newExpressionStatementAssign.right = methodWithOverloadFunctionNode[i];
+			newExpressionStatement.expression = newExpressionStatementAssign;
+			methodWithOverloadFunctionNode[i] = newExpressionStatement;
+		};
+		//create the switcher
+		var nodesWithOverload = [];
+		var alreadyCreated = [];
+		for (var i = 0; i < methodsWithOverload.length; i++) {
+			var currentMethod = methodsWithOverloadDetails[i].originalName;
+			if(alreadyCreated.indexOf(currentMethod) == -1){
+				//only enter here once for each method name
+				//creates a clone to preserve original
+				methodsWithOverloadDetailsi = JSON.parse(JSON.stringify(methodsWithOverloadDetails[i]));
+				alreadyCreated.push(currentMethod);
+				range = methodsWithOverloadDetailsi.range; //get method range
+				//creates a declaration with an empty body which will be created later
+				methodsWithOverloadDetailsi.params = []; //remove all params because we will use arguments variable
+				emptyBody = createMethodDeclarationNode(methodsWithOverloadDetailsi, range, [], range, range);
+				nodesWithOverload.push(emptyBody);
+			}
+		};
+		//All methods need to validate the call
+		for (var i = 0; i < nodesWithOverload.length; i++) {
+			var originalNameNode = nodesWithOverload[i].details.originalName;
+			//going to look all methods and create the if/else for them;
+			var methodSelecterBody = [];
+			var possibilitiesDeclaration = {"type":"VariableDeclaration","declarations":[{"type":"VariableDeclarator","id":{"type":"Identifier","name":"__possibilities"},"init":{"type":"ArrayExpression","elements":[]}}],"kind":"var"};
+			methodSelecterBody.push(possibilitiesDeclaration);
+			for (var j = 0; j < methodsWithOverload.length; j++) {
+				//if the current nodeWithOverload is the same as the methodWithOverload
+				//create a case for it "__possibilities.push([?])"
+				if(originalNameNode == methodsWithOverloadDetails[j].originalName){
+					//if there's no parameters "__possibilities.push([])"
+					if(methodsWithOverloadDetails[j].params.length == 0){
+						var noArgPossibility = {"type":"ExpressionStatement","expression":{"type":"CallExpression","callee":{"type":"MemberExpression","computed":false,"object":{"type":"Identifier","name":"__possibilities"},"property":{"type":"Identifier","name":"push"}},"arguments":[{"type":"ArrayExpression","elements":[]}]}};
+						methodSelecterBody.push(noArgPossibility);
+					}else{
+						//needs to create a condition for each parameter
+						methodSelecterBody.push(createArrayElementForParams(methodsWithOverloadDetails[j].params));
+					}
+				}
+			};
+			var methodName = {"type":"VariableDeclaration","declarations":[{"type":"VariableDeclarator","id":{"type":"Identifier","name":"__methodName"},"init":{"type":"Literal","value":originalNameNode,"raw":"\""+ originalNameNode +"\""}}],"kind":"var"};
+			var evalSwitcher = {"type":"ReturnStatement","argument":{"type":"CallExpression","callee":{"type":"MemberExpression","computed":false,"object":{"type":"MemberExpression","computed":true,"object":{"type":"Identifier","name":"__funArr"},"property":{"type":"CallExpression","callee":{"type":"MemberExpression","computed":false,"object":{"type":"MemberExpression","computed":false,"object":{"type":"Identifier","name":"___JavaRuntime"},"property":{"type":"Identifier","name":"functions"}},"property":{"type":"Identifier","name":"findMethodName"}},"arguments":[{"type":"Identifier","name":"__methodName"},{"type":"Identifier","name":"arguments"},{"type":"Identifier","name":"__possibilities"}]}},"property":{"type":"Identifier","name":"apply"}},"arguments":[{"type":"Literal","value":null,"raw":"null"},{"type":"CallExpression","callee":{"type":"MemberExpression","computed":false,"object":{"type":"MemberExpression","computed":false,"object":{"type":"Identifier","name":"___JavaRuntime"},"property":{"type":"Identifier","name":"functions"}},"property":{"type":"Identifier","name":"getProperArgs"}},"arguments":[{"type":"Identifier","name":"__methodName"},{"type":"Identifier","name":"arguments"},{"type":"Identifier","name":"__possibilities"}]}]}};
+			methodSelecterBody.push(methodName);
+			methodSelecterBody.push(evalSwitcher);
+			//creates the new body for the overloaded body
+			var overloadedBody = new node("BlockStatement");
+			overloadedBody.range = nodesWithOverload[i].details.range;
+			overloadedBody.body = methodSelecterBody;
+			//check and push the overloaded body to the method body
+			if(nodesWithOverload[i].expression.right.type == "FunctionExpression"){
+				nodesWithOverload[i].expression.right.body = overloadedBody;
+			}else if(nodesWithOverload[i].expression.right.right.type == "FunctionExpression"){
+				nodesWithOverload[i].expression.right.right.body = overloadedBody;
+			}else{
+				nodesWithOverload[i].expression.right.right.right.body = overloadedBody;
+			}
+		};
+		nodesWithoutOverload = nodesWithoutOverload.concat(nodesWithOverload);
+		nodesWithoutOverload = nodesWithoutOverload.concat(methodWithOverloadFunctionNode);
+		return nodesWithoutOverload;
 	}
 
-	parser.yy.createParameterizedConstructor = function createParameterizedConstructor(modifiers, params, methodBodyNodes){
-		constructorBodyNodes = methodBodyNodes;
-		constructorParams = params;
+	var createArrayElementForParams = function createArrayElementForParams(params){
+		var exp = new node("ExpressionStatement");
+		var expCall = new node("CallExpression");
+		expCall.callee = createMemberExpressionNode(createIdentifierNode("__possibilities", [0,0]), createIdentifierNode("push",[0,0]), [0,0]);
+		expCall.arguments = [];
+		var nodes = new node("ArrayExpression");
+		nodes.elements = [];
+		for (var i = 0; i < params.length; i++) {
+			nodes.elements.push(getArgumentForName(params[i].type, [0,0]));
+		};
+		expCall.arguments.push(nodes);
+		exp.expression = expCall;
+		return exp;
 	}
 
-	parser.yy.createFieldVariableNode = function createFieldVariableNode(modifiers, variableDeclarationNode, range){
+	var createIfForMatchingSignature = function createIfForMatchingSignature(conditions, functionNewName, paramsLength){
+		var testExpression;
+		var methodInvokeNodeExpressionArguments = [];
+		if(conditions.length == 1){
+			//the method has no parameters then arguments[0] == undefined
+			testExpression = createExpression("==", "BinaryExpression", createArgumentArgumentsForIndex(0), createIdentifierNode("undefined",[0,0]), range);
+		}
+		else{
+			//nest all conditions to match a signature starting from 1 to nest the first 2
+			
+			testExpression = conditions[0];
+			for (var i = 1; i < conditions.length; i++) {
+				testExpression = createExpression("&&", "LogicalExpression", testExpression, conditions[i], [0,0]);
+			};
+			
+			//create a new Argument for each original argument
+			for (var i = 0; i < paramsLength; i++) {
+				methodInvokeNodeExpressionArguments.push(createArgumentArgumentsForIndex(i));
+			};
+		}
+
+		var methodNode = createIdentifierNode(functionNewName, [0,0]);
+		var methodInvokeNodeExpression = new node("CallExpression");
+		methodInvokeNodeExpression.range = [0,0];
+		methodInvokeNodeExpression.callee = methodNode;
+		methodInvokeNodeExpression.arguments = methodInvokeNodeExpressionArguments;
+		consequentBlock = createReturnStatementNode(methodInvokeNodeExpression, [0,0]);
+		return createSimpleIfNode(testExpression, consequentBlock, [0,0], [0,0]);		
+	}
+
+	var createLogicalTestForParamAmount = function createLogicalTestForParamAmount(amount){
+		range = [0,0];
+		return createExpression("==", "BinaryExpression", createMemberExpressionNode(createIdentifierNode("arguments", range),createIdentifierNode("__xlength",range),range),  getArgumentForNumber(amount, [0,0]), range);
+	}
+
+	var createLogicalTestForIndexAndType = function createLogicalTestForIndexAndType(index, type){
+		range = [0,0];
+		var left = createExpression("==", "BinaryExpression", createDetermineTypeForIndex(index),  getArgumentForName("?", [0,0]), range);
+		var right = createExpression("==", "BinaryExpression", createDetermineTypeForIndex(index),  getArgumentForName(type, [0,0]), range);
+		var logicalExpression = createExpression("||", "LogicalExpression", left, right, range);
+		return logicalExpression;
+	}
+
+	var createDetermineTypeForIndex = function createDetermineTypeForIndex(index){
+		var determineTypeNode = new node("CallExpression");
+	 	determineTypeNode.range = [0,0];
+	 	determineTypeNode.arguments = [];
+	 	determineTypeNode.arguments.push(createArgumentArgumentsForIndex(index));
+		var callee = new node("MemberExpression");
+		callee.range = [0,0];
+
+		var functions = getRuntimeFunctions([0,0]);
+
+		var determineTypeProperty = createIdentifierNode("determineType", [0,0]);
+
+		callee.object = functions;
+		callee.property = determineTypeProperty;
+		callee.computed  = false;
+
+	 	determineTypeNode.callee = callee;
+	 	return determineTypeNode;
+	}
+
+	var createArgumentArgumentsForIndex = function createArgumentArgumentsForIndex(index){
+		var argumentNode = new node("MemberExpression");
+		argumentNode.computed = true;
+		argumentNode.object = createIdentifierNode("arguments",[0,0]);
+		argumentNode.property = getArgumentForNumber(index, [0,0]);
+		return argumentNode;
+	}
+
+	cocoJava.yy.createOverrideDefaultConstructor = function createOverrideDefaultConstructor(modifiers, methodBodyNodes){
+		constructorBodyNodes.push(methodBodyNodes);
+	}
+	var createDetermineTypeForExpression = function createDetermineTypeForExpression(expression){
+		var determineTypeNode = new node("CallExpression");
+	 	determineTypeNode.range = [0,0];
+	 	determineTypeNode.arguments = [];
+	 	determineTypeNode.arguments.push(expression);
+		var callee = new node("MemberExpression");
+		callee.range = [0,0];
+
+		var functions = getRuntimeFunctions([0,0]);
+
+		var determineTypeProperty = createIdentifierNode("determineType", [0,0]);
+
+		callee.object = functions;
+		callee.property = determineTypeProperty;
+		callee.computed  = false;
+
+	 	determineTypeNode.callee = callee;
+	 	return determineTypeNode;
+	}
+
+	cocoJava.yy.createImportNodeForName  = function createImportNodeForName(name){
+		//when importing other classes they shoud be here
+		if(name == "java.util.ArrayList" || name == "java.util.List" || name == "java.util.*"){
+			_ArrayList = {"type":"ExpressionStatement","expression":{"type":"CallExpression","callee":{"type":"MemberExpression","computed":false,"object":{"type":"Identifier","name":"___JavaRuntime"},"property":{"type":"Identifier","name":"loadLists"}},"arguments":[]}};
+			return _ArrayList;
+		}
+
+	}
+
+	cocoJava.yy.createFieldVariableNode = function createFieldVariableNode(modifiers, variableDeclarationNode, range){
 		var isStatic = false;
 		_.each(modifiers, function(modifier){
 			if (modifier == "static"){
@@ -610,7 +833,7 @@ exports.Cashew = function(javaCode){
 			}
 		});
 		variableDeclarationNode.isStatic = isStatic;
-		var isPrivate = undefined;
+		var isPrivate = true;
 		_.each(modifiers, function(modifier){
 			if (modifier == "public"){
 				isPrivate = false;
@@ -622,19 +845,20 @@ exports.Cashew = function(javaCode){
 
 		if (isPrivate == undefined){
 			//FIXME change this to a "NotImplementedException"
-			throw new SyntaxError("Field variables are only implemented as public or private");
+			raise("Field variables are only implemented as public or private", range);
 		}else if(!isStatic && !isPrivate){
 			//FIXME change this to a "NotImplementedException"
-			throw new SyntaxError("Instence variables are only implemented as private");
+			raise("Instance variables are only implemented as private", range);
 		}
 
-
+		
 		_.each(variableDeclarationNode.declarations, function(varNode){
-			varNode.type = "AssignmentExpression";
-			varNode.operator = "=";
-			varNode.left = createMemberExpressionNode(createIdentifierNode("__TemporaryClassName", [0,0]), varNode.id, range);
+			var newInit = new node("AssignmentExpression");
+			newInit.range = range;
+			newInit.operator = "=";
+			newInit.left = createMemberExpressionNode(createIdentifierNode("__ref", range), varNode.id, range);
 			var prototypeClass;
-			if(isStatic && !isPrivate){
+			if(!isPrivate){
 				prototypeClass = new node("AssignmentExpression");
 				prototypeClass.range = range;
 				prototypeClass.operator = "=";
@@ -642,76 +866,65 @@ exports.Cashew = function(javaCode){
 				prototypeClassRight =  new node("AssignmentExpression");
 				prototypeClassRight.range = range;
 				prototypeClassRight.operator = "=";
-				prototypeClassRight.left = createMemberExpressionNode(createIdentifierNode("__ref", [0,0]), varNode.id, range);
-				if(varNode.init == null){
-					prototypeClassRight.right = createIdentifierNode("undefined",[0,0]);
-				}else{
-					prototypeClassRight.right = varNode.init;
-				}
+				prototypeClassRight.left = createMemberExpressionNode(createIdentifierNode("__TemporaryClassName", [0,0]), varNode.id, range);
+				prototypeClassRight.right = varNode.init;
 				prototypeClass.right = prototypeClassRight;
+				newInit.right = prototypeClass;
 			}else if (isStatic && isPrivate){
 				prototypeClass = new node("AssignmentExpression");
 				prototypeClass.range = range;
 				prototypeClass.operator = "=";
-				prototypeClass.left = createMemberExpressionNode(createIdentifierNode("__ref", [0,0]), varNode.id, range);
-				if(varNode.init == null){
-					prototypeClass.right = createIdentifierNode("undefined",[0,0]);
-				}else{
-					prototypeClass.right = varNode.init;
-				}
+				prototypeClass.left = createMemberExpressionNode(createIdentifierNode("__TemporaryClassName", [0,0]), varNode.id, range);
+				prototypeClass.right = varNode.init;
+				newInit.right = prototypeClass;
 			}else{
-				varNode.left.object.name = "__ref";
-				if(varNode.init == null){
-					prototypeClass = createMemberExpressionNode(createIdentifierNode("__ref", [0,0]), varNode.id, range);
-				}else{
-					prototypeClass = varNode.init;
-				}
+				newInit.right = varNode.init;
 			}
 			
-			varNode.right = prototypeClass;
-			
-			delete varNode.id;
-			delete varNode.init;
+			varNode.init = newInit;
 		});
-		variableDeclarationNode.type = "SequenceExpression";
-		variableDeclarationNode.expressions = variableDeclarationNode.declarations;
-		delete  variableDeclarationNode.declarations;
-
-		return createExpressionStatementNode(variableDeclarationNode, range);
-
+		return variableDeclarationNode;
 	}
 
-	var replaceTemporaryClassWithClassName = function replaceTemporaryClassWithClassName(ast, className){
+	var replaceTemporaryClassWithClassName = function replaceTemporaryClassWithClassName(ast, className, extensionName){
 		for (var k in ast) {
 		    if (typeof ast[k] == "object" && ast[k] !== null) {
 				var node = ast[k];
 				if(node.type !== undefined && node.type == 'Identifier' && node.name == '__TemporaryClassName'){
 					node.name = className;
 				}
+				if(node.type !== undefined && node.type == 'Identifier' && node.name == '__SuperClass'){
+					node.name = extensionName;
+				}
+				if(node.type !== undefined && node.type == 'Identifier' && node.name == 'length'){
+					node.name = "_length";
+				}
 				ast[k] = node;
-				ast[k] = replaceTemporaryClassWithClassName(ast[k], className);
+				ast[k] = replaceTemporaryClassWithClassName(ast[k], className, extensionName);
+			}
+		}
+		return ast;
+	}
+	var specialReplacement = function specialReplacement(ast){
+		for (var k in ast) {
+		    if (typeof ast[k] == "object" && ast[k] !== null) {
+				var node = ast[k];
+				if(node.type !== undefined && node.type == 'Identifier' && node.name == '__xlength'){
+					node.name = "length";
+				}
+				ast[k] = node;
+				ast[k] = specialReplacement(ast[k]);
 			}
 		}
 		return ast;
 	}
 
-	var createConstructorNode = function createConstructorNode(className, methodBodyNodes, methodParams, range, variableNodes ){
-		var constructorNode = new node("FunctionDeclaration");
+	var createConstructorNode = function createConstructorNode(className, methodBodyNodes, range, variableNodes, extensionName){
+		var constructorNode = new node("FunctionExpression");
 		constructorNode.range = range;
 		constructorNode.id = createIdentifierNode(className, range);
 
-		if(methodParams == undefined){
-			constructorNode.params = [];
-		}else{
-			var paramNodes = [];
-			_.each(methodParams, function(param){
-				var newParam = createIdentifierNode(param.paramName, param.range);
-				newParam.javaType = param.type;
-				paramNodes.push(newParam);
-			});
-			createUpdateClassVariableReference(paramNodes, className, methodBodyNodes);
-			constructorNode.params = paramNodes;
-		}
+		constructorNode.params = [];
 		constructorNode.defaults = [];
 
 		var constructorNodeBody = new node("BlockStatement");
@@ -721,33 +934,64 @@ exports.Cashew = function(javaCode){
 		var constructorCallNode = new node("CallExpression");
 		constructorCallNode.range = range;
 
-		//creates the Myclass.__super__.constructor.apply(this, arguments)
-		var classNameObjectNode = createIdentifierNode(className, range);
-		var superPropertyNode = createIdentifierNode("__super__", range);
+		//__ref = this;
+		var expRef = new node("ExpressionStatement");
+		expRef.range = range;
+		var expRefExp =  new node("AssignmentExpression");
+		expRefExp.range = range;
+		expRefExp.operator = "=";
+		expRefExp.left = createIdentifierNode("__ref",range);
+		expRefExp.right = new node("ThisExpression");
+		expRef.expression = expRefExp;
+		constructorNodeBody.body.push(expRef);
 
-		var superMemberExpression = createMemberExpressionNode(classNameObjectNode, superPropertyNode, range);
-		var constructorPropertyNode = createIdentifierNode("constructor", range);
+		//Inherits super methods
+		var defNode = new node("VariableDeclaration");
+		defNode.range = range;
+		defNode.kind = "var";
+		defNode.declarations = [];
 
-		var constructorMemberExpression = createMemberExpressionNode(superMemberExpression, constructorPropertyNode, range);
-		var applyPropertyNode = createIdentifierNode("apply", range);
+		defDeclaration = new node("VariableDeclarator");
+		defDeclaration.range = range;
+		defDeclaration.id = createIdentifierNode("def", range);
+		defDeclaration.init = new node("CallExpression");
+		defDeclaration.init.range = range;
 
-		var constructorCallNodeCallee = createMemberExpressionNode(constructorMemberExpression, applyPropertyNode, range);
+		defDeclaration.init.callee = createMemberExpressionNode(createIdentifierNode("Object", range), createIdentifierNode("create",range), range);
+		defDeclaration.init.arguments = [];
 
-		constructorCallNode.callee = constructorCallNodeCallee;
+		var extensionClass;
+			//extends
+		if(extensionName == null){
+			extensionClass = createIdentifierNode("_Object", range);
+		}else{
+			extensionClass = createIdentifierNode(extensionName, range);
+		}
 
-		constructorCallNode.arguments = [];
+		var superArgs =  createMemberExpressionNode(extensionClass, createIdentifierNode("prototype", range), range);
+		defDeclaration.init.arguments.push(superArgs);
+		defNode.declarations.push(defDeclaration);
 
-		var thisExpressionNode = new node("ThisExpression");
-		thisExpressionNode.range = range;
-		constructorCallNode.arguments.push(thisExpressionNode);
+		constructorNodeBody.body.push(defNode);
+		constructorNodeBody.body.push({"type":"ForInStatement","left":{"type":"VariableDeclaration","declarations":[{"type":"VariableDeclarator","id":{"type":"Identifier","name":"n"},"init":null}],"kind":"var"},"right":{"type":"Identifier","name":"def"},"body":{"type":"BlockStatement","body":[{"type":"VariableDeclaration","declarations":[{"type":"VariableDeclarator","id":{"type":"Identifier","name":"item"},"init":{"type":"MemberExpression","computed":true,"object":{"type":"Identifier","name":"def"},"property":{"type":"Identifier","name":"n"}}}],"kind":"var"},{"type":"IfStatement","test":{"type":"BinaryExpression","operator":"instanceof","left":{"type":"Identifier","name":"item"},"right":{"type":"Identifier","name":"Function"}},"consequent":{"type":"BlockStatement","body":[{"type":"ExpressionStatement","expression":{"type":"AssignmentExpression","operator":"=","left":{"type":"MemberExpression","computed":true,"object":{"type":"Identifier","name":"__ref"},"property":{"type":"BinaryExpression","operator":"+","left":{"type":"Literal","value":"__super__","raw":"\"__super__\""},"right":{"type":"Identifier","name":"n"}}},"right":{"type":"Identifier","name":"item"}}}]},"alternate":null}]},"each":false});
 
-		var argumentsNode = createIdentifierNode("arguments", range);
-		constructorCallNode.arguments.push(argumentsNode);
+		if(methodBodyNodes.length != 0){
+			//if there's a constructor start building methods
+			constructorNodeBody.body = constructorNodeBody.body.concat(createOverloadConstructorNode(className, extensionName, methodBodyNodes));
+		}else{
+			//call super(); if there's no explicit constructor
+			var extensionExpression = new node("ExpressionStatement");
+			extensionExpression.range = range;
+			var extensionExpressionXp = new node("CallExpression");
+			extensionExpressionXp.range = range;
+			extensionExpressionXp.callee = createMemberExpressionNode(extensionClass, createIdentifierNode("call", range), range);
+			extensionExpressionXp.arguments = [];
+			var args = new node("ThisExpression");
+			args.range = range;
+			extensionExpressionXp.arguments.push(args);
 
-		constructorNodeBody.body.push(createExpressionStatementNode(constructorCallNode, range));
-		
-		if(methodBodyNodes){
-			constructorNodeBody.body = constructorNodeBody.body.concat(methodBodyNodes);
+			extensionExpression.expression = extensionExpressionXp;
+			constructorNodeBody.body.push(extensionExpression);
 		}
 
 		if(variableNodes){
@@ -757,10 +1001,145 @@ exports.Cashew = function(javaCode){
 		constructorNode.body = constructorNodeBody;
 		constructorNode.generator = false;
 		constructorNode.expression = false;
-		return constructorNode;
+
+		var expressionConstructor = new node("ExpressionStatement");
+		expressionConstructor.range = range;
+
+		var expressionConstructorExpression = new node("AssignmentExpression");
+		expressionConstructorExpression.range = range;
+		expressionConstructorExpression.operator = "=";
+		expressionConstructorExpression.left = createIdentifierNode(className, range);
+		expressionConstructorExpression.right = constructorNode;
+		
+		expressionConstructor.expression = expressionConstructorExpression;
+
+		return expressionConstructor;
 	}
 
-	parser.yy.createInvokeNode = function createInvokeNode(nameOrObject, nameRange, invokeNode, invokeRange, range){
+	var createOverloadConstructorNode = function createOverloadConstructorNode(className, extensionName, bodyNodes){
+		var ifNodes = [];
+		for (var i = 0; i < bodyNodes.length; i++) {
+			currentConstructor = bodyNodes[i];
+			range = currentConstructor.details.range;
+			//check if constructor has the same class name
+			if(className != currentConstructor.details.methodName){
+				raise("Constructor needs to have the same name as class", range);
+			}
+			//Check if there's a duplicate signature
+			for (var j = 0; j < bodyNodes.length; j++) {
+				otherConstructor = bodyNodes[j];
+				if(i != j){
+					if(currentConstructor.details.methodSignature == otherConstructor.details.methodSignature){
+						raise("Duplicated constructor signature " + currentConstructor.details.methodSignature, range);
+					}
+				}
+			};
+			var noSuperCall = false;
+			//Check if there's a super call in the constructor and if it's the first member
+			for (var j = 0; j < bodyNodes[i].length; j++) {
+				if(j != 0 && bodyNodes[i][j].expression.type == "CallExpression" && bodyNodes[i][j].expression.callee.object && (bodyNodes[i][j].expression.callee.object.name == "__SuperClass" || bodyNodes[i][j].expression.callee.object.name == "_Object")){
+					raise("Call to super must be the first statement in constructor", range);
+				}
+				if(j == 0){
+					if(bodyNodes[i][j].expression.type == "CallExpression"){
+						if(bodyNodes[i][j].expression.callee.object){
+							if(bodyNodes[i][j].expression.callee.object.name == "__SuperClass"){
+								//if the first is a superCall replaces the __SuperClass for the actual name;
+								if(extensionName == null){
+									bodyNodes[i][j].expression.callee.object.name = "_Object";
+								}else{
+									bodyNodes[i][j].expression.callee.object.name = extensionName;
+								}
+							}else if (bodyNodes[i][j].expression.callee.object.name != "_Object"){
+								//if it's not a super call for a super class and also not a super call from Object
+								noSuperCall = true;
+							}
+						}else{
+							noSuperCall = true;
+						}
+					}else{
+						noSuperCall = true;
+					}
+				}
+			};
+
+			//If there's no super call insert the super();
+			if (noSuperCall){
+				var extensionClass;
+				//extends
+				if(extensionName == null){
+					extensionClass = createIdentifierNode("_Object", range);
+				}else{
+					extensionClass = createIdentifierNode(extensionName, range);
+				}
+				var extensionExpression = new node("ExpressionStatement");
+				extensionExpression.range = range;
+				var extensionExpressionXp = new node("CallExpression");
+				extensionExpressionXp.range = range;
+				extensionExpressionXp.callee = createMemberExpressionNode(extensionClass, createIdentifierNode("call", range), range);
+				extensionExpressionXp.arguments = [];
+				var args = new node("ThisExpression");
+				args.range = range;
+				extensionExpressionXp.arguments.push(args);
+
+				extensionExpression.expression = extensionExpressionXp;
+				bodyNodes[i].unshift(extensionExpression);	
+			}
+			//Create a condition for each constructor
+			//check params anc create conditions
+			if(currentConstructor.details.params.length == 0){
+				ifNodes.push(createIfForMatchingConstructor([], currentConstructor));
+			}else{
+				var conditions = [];
+				for (var j = 0; j < currentConstructor.details.params.length; j++) {
+					conditions.push(createLogicalTestForIndexAndType(j, currentConstructor.details.params[j].type));
+					currentConstructor.unshift(createVariableReplacement(currentConstructor.details.params[j].paramName, j));
+				};
+
+				ifNodes.push(createIfForMatchingConstructor(conditions, currentConstructor, currentConstructor.details.params.length));
+			}
+		};
+		return ifNodes;
+	}
+
+	var createVariableReplacement = function createVariableReplacement(paramName, index){
+		var varReplacement = new node("VariableDeclarator");
+		varReplacement.range = [0,0];
+		varReplacement.id = createIdentifierNode(paramName, [0,0]);
+		varReplacement.init = createArgumentArgumentsForIndex(index);
+		var declarationReplacement = new node("VariableDeclaration");
+		declarationReplacement.range = [0,0];
+		declarationReplacement.declarations = [];
+		declarationReplacement.declarations.push(varReplacement);
+		declarationReplacement.kind = "var";
+		return declarationReplacement;
+	}
+
+	var createIfForMatchingConstructor = function createIfForMatchingConstructor(conditions, consequentBlock, paramsLength){
+		var testExpression;
+		var methodInvokeNodeExpressionArguments = [];
+		if(conditions.length == 0){
+			//the method has no parameters then arguments[0] == undefined
+			testExpression = createExpression("==", "BinaryExpression", createArgumentArgumentsForIndex(0), createIdentifierNode("undefined",[0,0]), [0,0]);
+		}
+		else{
+			//nest all conditions to match a signature starting from 1 to nest the first 2
+			if(conditions.length == 1){
+				testExpression = conditions[0];
+			}else{
+				for (var i = 1; i < conditions.length; i++) {
+					testExpression = createExpression("&&", "LogicalExpression", conditions[i-1], conditions[i], [0,0]);
+				};
+			}
+			//create a new Argument for each original argument
+			for (var i = 0; i < paramsLength; i++) {
+				methodInvokeNodeExpressionArguments.push(createArgumentArgumentsForIndex(i));
+			};
+		}
+		return createSimpleIfNode(testExpression, consequentBlock, [0,0], [0,0]);
+	}
+
+	cocoJava.yy.createInvokeNode = function createInvokeNode(nameOrObject, nameRange, invokeNode, invokeRange, range){
 		var classObjectNode;
 		if(typeof nameOrObject === "string"){
 			classObjectNode = createIdentifierNode(nameOrObject, nameRange);
@@ -781,7 +1160,7 @@ exports.Cashew = function(javaCode){
 		
 	}
 
-	parser.yy.createSimpleMethodInvokeNode = function createSimpleMethodInvokeNode(methodName, methodRange, argumentsNodes, range){
+	cocoJava.yy.createSimpleMethodInvokeNode = function createSimpleMethodInvokeNode(methodName, methodRange, argumentsNodes, range){
 		var methodNode = createIdentifierNode(methodName, methodRange);
 		var methodInvokeNodeExpression = new node("CallExpression");
 		methodInvokeNodeExpression.range = range;
@@ -791,16 +1170,35 @@ exports.Cashew = function(javaCode){
 		return methodInvokeNodeExpression;
 	}
 
-	parser.yy.createConstructorCall = function createConstructorCall(methodName, methodRange, argumentsNodes, range){
+	cocoJava.yy.createConstructorCall = function createConstructorCall(methodName, methodRange, argumentsNodes, range){
 		var constructorNode = new node("NewExpression");
 		constructorNode.range = range;
 		constructorNode.callee = createIdentifierNode(methodName, methodRange);
-		//TODO: Validate argument types
 		constructorNode.arguments = argumentsNodes;
 		return constructorNode;
 	}
 
-	var createVariableAttribution = parser.yy.createVariableAttribution = function createVariableAttribution(varName, varRange, assignmentRange, expressionNode, index1, index2){
+	cocoJava.yy.createSuperInvokeNode = function createSuperInvokeNode(methodNode, superRange, range){
+		var oldCallee = methodNode.callee;
+		oldCallee.name = "__super__" + oldCallee.name;
+		var newCallee = createMemberExpressionNode(createIdentifierNode("__ref", superRange), oldCallee, range);
+		methodNode.callee = newCallee;
+		return methodNode;
+	}
+
+	cocoJava.yy.createSuperConstructorNode = function createSuperConstructorNode(superRange, argumentsNodes, range){
+		var superInvokeNodeExpression = new node("CallExpression");
+		superInvokeNodeExpression.range = range;
+		superInvokeNodeExpression.callee = createMemberExpressionNode(createIdentifierNode("__SuperClass", superRange), createIdentifierNode("call", superRange), range);
+		superInvokeNodeExpression.arguments = [];
+		var args = new node("ThisExpression");
+		args.range = range;
+		superInvokeNodeExpression.arguments.push(args);
+		superInvokeNodeExpression.arguments = superInvokeNodeExpression.arguments.concat(argumentsNodes);
+		return superInvokeNodeExpression;
+	}
+
+	var createVariableAttribution = cocoJava.yy.createVariableAttribution = function createVariableAttribution(varName, varRange, assignmentRange, expressionNode, index1, index2){
 		var assignmentNode = new node("ExpressionStatement");
 		assignmentNode.range = assignmentRange;
 
@@ -827,24 +1225,22 @@ exports.Cashew = function(javaCode){
 		}
 		assignmentExpressionNode.left = assignmentNodeLeft;
 
-		if(expressionNode.type === "NewExpression"){
-			assignmentExpressionNode.right = expressionNode;
-		}else{
-			//var setNode = createRuntimeCheckAssignment(varName, varRange, expressionNode, index1, index2, assignmentRange);
-			//FIXME Removed Validations for now
-			assignmentExpressionNode.right = expressionNode;
-		}
+		
+		var setNode = createRuntimeCheckAssignment(varName, varRange, expressionNode, index1, index2, assignmentRange);
+		//FIXME Removed Validations for now
+		assignmentExpressionNode.right = setNode;
+		
 		assignmentNode.expression = assignmentExpressionNode;
 		return assignmentNode;
 	}
 
-	parser.yy.createEmptyStatement = function createEmptyStatement(range){
+	cocoJava.yy.createEmptyStatement = function createEmptyStatement(range){
 		var emptyStatement = new node("EmptyStatement");
 		emptyStatement.range = range;
 		return emptyStatement;
 	}
 
-	parser.yy.createMathOperation = function createMathOperation(op, left, right, range){
+	cocoJava.yy.createMathOperation = function createMathOperation(op, left, right, range){
 		var operation;
 		switch (op){
 			case '+':
@@ -862,8 +1258,26 @@ exports.Cashew = function(javaCode){
 			case '%':
 				operation = "mod";
 				break;
+			case '>>':
+				operation = "rhs";
+				break;
+			case '>>>':
+				operation = "zrhs";
+				break;
+			case '<<':
+				operation = "lhs";
+				break;
+			case '&':
+				operation = "iand";
+				break;
+			case '|':
+				operation = "ior";
+				break;
+			case '^':
+				operation = "xor";
+				break;
 			default:
-				throw SyntaxError('Invalid Operation');
+				raise('Invalid Operation', range);
 				break;
 		}
 
@@ -888,25 +1302,67 @@ exports.Cashew = function(javaCode){
 		return operationNode;
 	}
 
-	parser.yy.createExpression = function createExpression(op, type, left, right, range){
-		var logicalNode = new node(type);
-		logicalNode.range = range;
-		logicalNode.operator = op;
-		logicalNode.left = left;
-		logicalNode.right = right;
-		return logicalNode;
+	var createExpression = cocoJava.yy.createExpression = function createExpression(op, type, left, right, range){
+		if(op == "=="){
+			var callExpression = new node("CallExpression");
+			callExpression.range = range;
+			callExpression.callee = createMemberExpressionNode(getRuntimeOps(range), createIdentifierNode("eq",range), range);
+			callExpression.arguments = [];
+			callExpression.arguments.push(left);
+	 		callExpression.arguments.push(right);
+			return callExpression;
+		}
+		else if(op == "!="){
+			var callExpression = new node("CallExpression");
+			callExpression.range = range;
+			callExpression.callee = createMemberExpressionNode(getRuntimeOps(range), createIdentifierNode("neq",range), range);
+			callExpression.arguments = [];
+			callExpression.arguments.push(left);
+	 		callExpression.arguments.push(right);
+			return callExpression;
+		}
+		else{
+			var logicalNode = new node(type);
+			logicalNode.range = range;
+			logicalNode.operator = op;
+			logicalNode.left = left;
+			logicalNode.right = right;
+			return logicalNode;
+		}
 	}
 
-	parser.yy.createUnaryExpression = function createExpression(op, expression, range){
-		var unaryNode = new node("UnaryExpression");
-		unaryNode.range = range;
-		unaryNode.operator = op;
-		unaryNode.prefix = "true";
-		unaryNode.argument = expression;
-		return unaryNode;
+	cocoJava.yy.createUnaryExpression = function createUnaryExpression(op, expression, range){
+		if(op == "-"){
+			var callExpression = new node("CallExpression");
+			callExpression.range = range;
+			callExpression.callee = createMemberExpressionNode(getRuntimeFunctions(range), createIdentifierNode("createNumber",range), range);
+			callExpression.arguments = [];
+			var unaryNode = new node("UnaryExpression");
+			unaryNode.range = range;
+			unaryNode.operator = op;
+			unaryNode.prefix = "true";
+			unaryNode.argument = expression;
+			callExpression.arguments.push(unaryNode);
+	 		callExpression.arguments.push(createDetermineTypeForExpression(expression));
+			return callExpression;
+		}else if(op == "~"){
+			var callExpression = new node("CallExpression");
+			callExpression.range = range;
+			callExpression.callee = createMemberExpressionNode(getRuntimeOps(range), createIdentifierNode("nay",range), range);
+			callExpression.arguments = [];
+			callExpression.arguments.push(expression);
+			return callExpression;
+		}else{
+			var unaryNode = new node("UnaryExpression");
+			unaryNode.range = range;
+			unaryNode.operator = op;
+			unaryNode.prefix = "true";
+			unaryNode.argument = expression;
+			return unaryNode;
+		}		
 	}
 
-	parser.yy.createTernaryNode = function createTernaryNode(testExpression, consequentExpression, alternateExpression, expressionRange){
+	var createTernaryNode = cocoJava.yy.createTernaryNode = function createTernaryNode(testExpression, consequentExpression, alternateExpression, expressionRange){
 		var ternaryNode = new node("ConditionalExpression");
 		ternaryNode.range = expressionRange;
 		ternaryNode.test = testExpression;
@@ -915,30 +1371,65 @@ exports.Cashew = function(javaCode){
 		return ternaryNode;
 	}
 
-	parser.yy.createVarDeclarationNode = function createVarDeclarationNode(type, declarators, declarationRange){
+	cocoJava.yy.createVarDeclarationNode = function createVarDeclarationNode(type, declarators, declarationRange){
 		var varDeclarationNode = new node("VariableDeclaration");
 		varDeclarationNode.range = declarationRange;
 		varDeclarationNode.kind = "var";
 		varDeclarationNode.javaType = type;
 		varDeclarationNode.declarations = [];
-
+		//Updates the type verification when declaring a variable;
+		for (var i = 0; i < declarators.length; i++) {
+			currentDeclarator = declarators[i];
+			if(declarators[i].init.type == "CallExpression"){
+				declarators[i].init.arguments.push(getArgumentForName(type, declarationRange));
+			}else if(declarators[i].init.type == "NewExpression"){
+				if(declarators[i].init.callee.name == "_NotInitialized"){
+					//changes the type of the not initialized
+					declarators[i].init.arguments[1] = getArgumentForName(type, declarationRange);
+				}else if(declarators[i].init.callee.name != type){
+					//Autobox
+					if(type == "int" && declarators[i].init.callee.name == "Integer"){
+						declarators[i].init = declarators[i].init.arguments[0];
+					}
+					else if(type == "double" && declarators[i].init.callee.name == "Double"){
+						declarators[i].init = declarators[i].init.arguments[0];
+						declarators[i].init.arguments[1] = getArgumentForName(type, declarationRange);
+					}
+					else if(type == "double" && declarators[i].init.callee.name == "Integer"){
+						declarators[i].init = declarators[i].init.arguments[0];
+						declarators[i].init.arguments[1] = getArgumentForName(type, declarationRange);
+					}else if(type == "Double" && declarators[i].init.callee.name == "Integer"){
+						declarators[i].init.callee.name = type;
+					}else{
+						raise("Incompatible types" , declarationRange);
+					}
+				}
+			}
+		};
 		varDeclarationNode.declarations = varDeclarationNode.declarations.concat(declarators);
 
 		return varDeclarationNode;
 	}
 
-	parser.yy.createVarDeclaratorNodeNoInit = function createVarDeclarationNodeNoInit(varName, declarationRange){
+	cocoJava.yy.createVarDeclaratorNodeNoInit = function createVarDeclarationNodeNoInit(varName, declarationRange){
 		var varDeclaratorNode = new node("VariableDeclarator");
 		varDeclaratorNode.range = declarationRange;
 
 		var idNode = createIdentifierNode(varName, declarationRange);
 		varDeclaratorNode.id = idNode;
-		varDeclaratorNode.init = null;
+		var initNode  = new node("NewExpression");
+		initNode.range = declarationRange;
+		initNode.callee = createIdentifierNode("_NotInitialized", declarationRange);
+		initNode.arguments = [];
+		initNode.arguments.push(getArgumentForName(varName, declarationRange));
+		initNode.arguments.push(getArgumentForName("tempType", declarationRange));
+		initNode.arguments.push(getArgumentForRange(declarationRange));
+		varDeclaratorNode.init = initNode;
 
 		return varDeclaratorNode;
 	}
 
-	parser.yy.createVarDeclaratorNodeWithInit = function createVarDeclarationNodeWithInit(varName, varRange, assignment, assignmentRange, declarationRange){
+	cocoJava.yy.createVarDeclaratorNodeWithInit = function createVarDeclarationNodeWithInit(varName, varRange, assignment, assignmentRange, declarationRange){
 		var varDeclaratorNode = new node("VariableDeclarator");
 		varDeclaratorNode.range = declarationRange;
 
@@ -949,9 +1440,8 @@ exports.Cashew = function(javaCode){
 		if(assignment.type === "NewExpression"){
 			varDeclaratorNode.init = assignment;
 		}else{
-			//var initNode = createRuntimeCheckAssignment(varName, varRange, assignment, null, null, assignmentRange);
-			//FIXME Removed Validations for now
-			varDeclaratorNode.init = assignment;
+			var initNode = createRuntimeCheckAssignment(varName, varRange, assignment, null, null, assignmentRange);
+			varDeclaratorNode.init = initNode;
 		}
 		return varDeclaratorNode;
 	}
@@ -961,8 +1451,11 @@ exports.Cashew = function(javaCode){
 		initNode.range = range;
 		initNode.arguments = [];
 		initNode.arguments.push(assignment);
-		initNode.arguments.push(getArgumentForVariable(varName, varRange));
-		initNode.arguments.push(getArgumentForVariable(varName, varRange));
+		if(varName.constructor == String){
+			initNode.arguments.push(getArgumentForVariable(varName, varRange));
+		}else{
+			initNode.arguments.push(varName);
+		}
 		if(index1){
 			initNode.arguments.push(index1);
 		}else{
@@ -973,29 +1466,29 @@ exports.Cashew = function(javaCode){
 		}else{
 			initNode.arguments.push(getNullArgument());
 		}
-		initNode.arguments.push(getArgumentForNumber(assignment.ASTNodeID, range));
-		//FIXME changed validateSet to checkAssignment for now
+		initNode.arguments.push(getArgumentForRange(range));
+
 		var callee = createMemberExpressionNode(getRuntimeFunctions(range), createIdentifierNode("checkAssignment", range), range, false);
 
 		initNode.callee = callee;
 		return initNode;
 	}
 
-	var createExpressionStatementNode = parser.yy.createExpressionStatementNode =  function createExpressionStatementNode(expression, range){
+	var createExpressionStatementNode = cocoJava.yy.createExpressionStatementNode =  function createExpressionStatementNode(expression, range){
 		var expressionStatementNode = new node("ExpressionStatement");
 		expressionStatementNode.range = range
 		expressionStatementNode.expression = expression;
 		return expressionStatementNode;
 	}
 
-	var createReturnStatementNode = parser.yy.createReturnStatementNode =  function createReturnStatementNode(expression, range){
+	var createReturnStatementNode = cocoJava.yy.createReturnStatementNode =  function createReturnStatementNode(expression, range){
 		var returnStatementNode = new node("ReturnStatement");
 		returnStatementNode.range = range
 		returnStatementNode.argument = expression;
 		return returnStatementNode;
 	}
 
-	var createSimpleIfNode = parser.yy.createSimpleIfNode = function createSimpleIfNode(testExpression, consequentBlock, consequentRange, ifRange){
+	var createSimpleIfNode = cocoJava.yy.createSimpleIfNode = function createSimpleIfNode(testExpression, consequentBlock, consequentRange, ifRange){
 		var simpleIf = new node("IfStatement");
 		simpleIf.range = ifRange;
 		simpleIf.test = testExpression;
@@ -1011,7 +1504,7 @@ exports.Cashew = function(javaCode){
 		return simpleIf;
 	}
 
-	parser.yy.createSimpleIfElseNode = function createSimpleIfElseNode(testExpression, consequentBlock, consequentRange, alternateBlock, alternateRange, ifRange){
+	cocoJava.yy.createSimpleIfElseNode = function createSimpleIfElseNode(testExpression, consequentBlock, consequentRange, alternateBlock, alternateRange, ifRange){
 		var ifElseNode = createSimpleIfNode(testExpression, consequentBlock, consequentRange, ifRange);
 
 		alternateNode = new node("BlockStatement");
@@ -1024,7 +1517,7 @@ exports.Cashew = function(javaCode){
 		return ifElseNode;
 	}
 
-	var createSimpleListNode = parser.yy.createSimpleListNode = function createSimpleListNode(varName, varRange, range){
+	var createSimpleListNode = cocoJava.yy.createSimpleListNode = function createSimpleListNode(varName, varRange, range){
 		var simpleList = new node("VariableDeclarator");
 		simpleList.range = range;
 
@@ -1037,70 +1530,68 @@ exports.Cashew = function(javaCode){
 		return simpleList;
 	}
 
-	parser.yy.createListWithInitNode = function createListWithInitNode(varName, varRange, initNode, range){
+	cocoJava.yy.createListWithInitNode = function createListWithInitNode(varName, varRange, initNode, range){
 		var nullList = createSimpleListNode(varName, varRange, range);
 		nullList.init = initNode;
 		return nullList;
 	}
 
-	var createListInitialization = parser.yy.createListInitialization = function createListInitialization(nodeType, range){
+	var createListInitialization = cocoJava.yy.createListInitialization = function createListInitialization(nodeType, range){
 		var newExpressionNode = new node("NewExpression");
 		newExpressionNode.range = range;
-		var newExpressionNodecallee = createMemberExpressionNode(createIdentifierNode("___JavaRuntime", range),createIdentifierNode("_ArrayList", range), range);
+		var newExpressionNodecallee = createIdentifierNode("_ArrayList", range);
 		newExpressionNode.callee = newExpressionNodecallee;
 		newExpressionNode.arguments = [];
 		newExpressionNode.arguments.push(getArgumentForName(nodeType, range));
 		return newExpressionNode;
  	}
 
-	var createSimpleArrayNode = parser.yy.createSimpleArrayNode = function createSimpleArrayNode(varName, varRange, range){
-		var simpleArray = new node("VariableDeclarator");
-		simpleArray.range = range;
+	var createSimpleArrayNode = cocoJava.yy.createSimpleArrayNode = function createSimpleArrayNode(varName, varRange, declarationRange){
+		var varDeclaratorNode = new node("VariableDeclarator");
+		varDeclaratorNode.range = declarationRange;
 
-		var idNode = createIdentifierNode(varName, varRange);
-		simpleArray.id = idNode;
+		var idNode = createIdentifierNode(varName, declarationRange);
+		varDeclaratorNode.id = idNode;
+		var initNode  = new node("NewExpression");
+		initNode.range = declarationRange;
+		initNode.callee = createIdentifierNode("_NotInitialized", declarationRange);
+		initNode.arguments = [];
+		initNode.arguments.push(getArgumentForName(varName, declarationRange));
+		initNode.arguments.push(getArgumentForName("tempType", declarationRange));
+		initNode.arguments.push(getArgumentForRange(declarationRange));
+		varDeclaratorNode.init = initNode;
 
-		var nodeArray = new node("ArrayExpression")
-		nodeArray.elements = [];
-		simpleArray.init = nodeArray;
-
-		return simpleArray;
+		return varDeclaratorNode;
 	}
 
-	parser.yy.createArrayWithInitNode = function createArrayWithInitNode(varName, varRange, initNode, range){
+	cocoJava.yy.createArrayWithInitNode = function createArrayWithInitNode(varName, varRange, initNode, range){
 		var nullArray = createSimpleArrayNode(varName, varRange, range);
 		nullArray.init = initNode;
 		return nullArray;
 	}
 
-	var createArrayWithNullInitialization = parser.yy.createArrayWithNullInitialization = function createArrayWithNullInitialization(nodeExp, range){
-		var nodeArray = new node("ArrayExpression")
-			, size = nodeExp.value || 0;
-		nodeArray.range = range;	
-		nodeArray.elements = [];
-
-		// TODO: Validar a expressão que declara o tamanho do array.
-		_.times(parseInt(size),function(){
-			var literal = getNullArgument();
-			nodeArray.elements.push(literal);
-		});
-		return nodeArray;
-	}
-
-	parser.yy.createTwoDimensionalArray = function createTwoDimensionalArray(nodesExp, range){
-		var nodeArray = new node("ArrayExpression");
+	cocoJava.yy.createArrayWithNullInitialization = function createArrayWithNullInitialization(nodeExp, range){
+		var nodeArray = new node("CallExpression");
 		nodeArray.range = range;
-		nodeArray.elements = [];
-		_.times(nodesExp[0].value, function(){
-			if(nodesExp[1]){
-				var literal = createArrayWithNullInitialization(nodesExp[1],range);
-			}
-			nodeArray.elements.push(literal);
-		});
+		nodeArray.callee = createMemberExpressionNode(getRuntimeFunctions(range), createIdentifierNode("createNullArrayForIndexes",range), range);
+		nodeArray.arguments = [];
+		nodeArray.arguments.push(nodeExp);
+ 		nodeArray.arguments.push(getArgumentForRange(range));
 		return nodeArray;
 	}
 
-	var createArrayWithInitialization = parser.yy.createArrayWithInitialization = function createArrayWithInitialization(values, range){
+	cocoJava.yy.createTwoDimensionalArray = function createTwoDimensionalArray(nodesExp, range){
+		var nodeArray = new node("CallExpression");
+		nodeArray.range = range;
+		nodeArray.callee = createMemberExpressionNode(getRuntimeFunctions(range), createIdentifierNode("createNullArrayForIndexes",range), range);
+		nodeArray.arguments = [];
+		nodeArray.arguments.push(nodesExp[0]);
+ 		nodeArray.arguments.push(getArgumentForRange(range));
+		nodeArray.arguments.push(nodesExp[1]);
+		return nodeArray;
+	}
+
+	var createArrayWithInitialization = cocoJava.yy.createArrayWithInitialization = function createArrayWithInitialization(values, range){
 		var nodeArray = new node("ArrayExpression")
 			, size = values.length;
 		nodeArray.range = range;	
@@ -1116,15 +1607,7 @@ exports.Cashew = function(javaCode){
 		return nodeArray;
 	}
 
-	parser.yy.validateDeclaratorsDimension = function validateDeclaratorsDimension(declaratorNodes, type){
-		_.each(declaratorNodes, function(declaratorNode){
-			if(declaratorNode.init.elements.length > 0 && declaratorNode.init.elements[0].type == "ArrayExpression"){
-				throw TypeError("Invalid type for " + type);
-			}
-		});
-	}
-
-	parser.yy.createArrayFromInitialArray = function createArrayFromInitialArray(arrays, range){
+	cocoJava.yy.createArrayFromInitialArray = function createArrayFromInitialArray(arrays, range){
 		//determine if it's 1 or 2 dimension and validates if it's more than 2 dimension
 		var dimensions = 1;
 		for (var i = 0; i < arrays.length; i++) {
@@ -1135,11 +1618,11 @@ exports.Cashew = function(javaCode){
 		if(dimensions == 2){
 			for (var i = 0; i < arrays.length; i++) {
 				if(arrays[i].constructor != Array){
-					throw SyntaxError("Incompatible types on array");
+					raise("Incompatible types on array", range);
 				}
 				for(var j = 0; j < arrays[i].length; j++){
 					if(arrays[i][j].constructor == Array){
-						throw SyntaxError("More than 2-dimension arrays are not supported");
+						raise("More than 2-dimension arrays are not supported", range);
 					}
 				}
 			}
@@ -1147,33 +1630,48 @@ exports.Cashew = function(javaCode){
 		return createArrayWithInitialization(arrays, range);
 	}
 
-	parser.yy.createSwitchNode = function createSwitchNode(discriminant, cases, range){
+	cocoJava.yy.createSwitchNode = function createSwitchNode(discriminant, cases, range){
 		var switchNode = new node("SwitchStatement");
 		switchNode.range = range;
-		switchNode.discriminant = discriminant;
+		var correctedDiscriminant = new node("CallExpression");
+		correctedDiscriminant.range = range;
+		correctedDiscriminant.callee = createMemberExpressionNode(getRuntimeOps(range), createIdentifierNode("fixSwitch",range), range);
+		correctedDiscriminant.arguments = [];
+		correctedDiscriminant.arguments.push(discriminant);
+ 		correctedDiscriminant.arguments.push(getArgumentForRange(range));
+		switchNode.discriminant = correctedDiscriminant;
 		switchNode.cases = [];
 		switchNode.cases = switchNode.cases.concat(cases);
 		return switchNode;
 	}
 
-	parser.yy.createDefaultSwitchNode = function createDefaultSwitchNode(range){
+	cocoJava.yy.createDefaultSwitchNode = function createDefaultSwitchNode(range){
 		return createCaseSwitchNode(null, range);
 	}
 
-	parser.yy.addSwitchCaseStatements = function addSwitchCaseStatements(cases, block){
+	cocoJava.yy.addSwitchCaseStatements = function addSwitchCaseStatements(cases, block){
 		cases[cases.length -1].consequent = block;
 		return cases;
 	}
 
-	var createCaseSwitchNode = parser.yy.createCaseSwitchNode = function createCaseSwitchNode(testExpression, range){
+	var createCaseSwitchNode = cocoJava.yy.createCaseSwitchNode = function createCaseSwitchNode(testExpression, range){
 		var caseNode = new node("SwitchCase");
 		caseNode.range = range;
-		caseNode.test = testExpression;
+		var correctedTest = null;
+		if(testExpression){
+			correctedTest = new node("CallExpression");
+			correctedTest.range = range;
+			correctedTest.callee = createMemberExpressionNode(getRuntimeOps(range), createIdentifierNode("fixSwitch",range), range);
+			correctedTest.arguments = [];
+			correctedTest.arguments.push(testExpression);
+	 		correctedTest.arguments.push(getArgumentForRange(range));
+		}
+		caseNode.test = correctedTest;
 		caseNode.consequent = [];
 		return caseNode;
 	}
 
-	parser.yy.createSimpleWhileNode = function createSimpleWhileNode(testExpression, whileBlock, blockRange, whileRange){
+	cocoJava.yy.createSimpleWhileNode = function createSimpleWhileNode(testExpression, whileBlock, blockRange, whileRange){
 		var simpleWhile = new node("WhileStatement");
 		simpleWhile.range = whileRange;
 		simpleWhile.test = testExpression;
@@ -1188,7 +1686,7 @@ exports.Cashew = function(javaCode){
 		return simpleWhile;
 	}
 
-	parser.yy.createDoWhileNode = function createDoWhileNode(testExpression, whileBlock, blockRange, whileRange){
+	cocoJava.yy.createDoWhileNode = function createDoWhileNode(testExpression, whileBlock, blockRange, whileRange){
 		var doWhile = new node("DoWhileStatement");
 		doWhile.range = whileRange;
 		doWhile.test = testExpression;
@@ -1203,21 +1701,21 @@ exports.Cashew = function(javaCode){
 		return doWhile;
 	}
 
-	parser.yy.createBreakStatement = function createBreakStatement(range){
+	cocoJava.yy.createBreakStatement = function createBreakStatement(range){
 		var breakNode = new node("BreakStatement");
 		breakNode.range = range;
 
 		return breakNode;
 	}
 
-	parser.yy.createContinueStatement = function createContinueStatement(range){
+	cocoJava.yy.createContinueStatement = function createContinueStatement(range){
 		var continueNode = new node("ContinueStatement");
 		continueNode.range = range;
 
 		return continueNode;
 	}
 
-	parser.yy.createForStatement = function createForStatement(forInit, testExpression, updateExpressions, updateRange, forBlock, blockRange, forRange){
+	cocoJava.yy.createForStatement = function createForStatement(forInit, testExpression, updateExpressions, updateRange, forBlock, blockRange, forRange){
 		var forNode = new node("ForStatement");
 		forNode.range = forRange;
 		forNode.init = forInit;
@@ -1241,11 +1739,80 @@ exports.Cashew = function(javaCode){
 		blockNode.body = blockNode.body.concat(forBlock);
 
 		forNode.body = blockNode;
+		var forEnclose = new node("CallExpression");
+		forEnclose.range = forRange;
+		forEnclose.callee = new node("FunctionExpression");
+		forEnclose.callee.range = forRange;
+		forEnclose.callee.id = null;
+		forEnclose.callee.params = [];
+		forEnclose.callee.defaults = [];
+		forEnclose.callee.body = new node("BlockStatement");
+		forEnclose.callee.body.range = forRange;
+		forEnclose.callee.body.body = [];
+		forEnclose.callee.body.body.push(forNode);
+		forEnclose.callee.generator = false;
+		forEnclose.callee.expression = false;
+		forEnclose.arguments = [];
+        
+        forVarBlock = new node("BlockStatement");
+        forVarBlock.range = forRange;
 
-		return forNode;
+        forVarBlock.body = [];
+
+        forVarDeclaration =  new node("VariableDeclaration")
+        forVarDeclaration.range = forRange;
+        forVarDeclaration.declarations = [];
+        forVarDeclaration.kind = "var";
+
+        forVarDeclarator = new node("VariableDeclarator");
+        forVarDeclarator.range = forRange;
+        forVarDeclarator.id = createIdentifierNode("__forReturn", forRange);
+        forVarDeclarator.init = forEnclose;
+        forVarDeclaration.declarations.push(forVarDeclarator);
+
+        forVarBlock.body.push(forVarDeclaration);
+        forVarBlock.body.push({"type":"IfStatement","test":{"type":"BinaryExpression","operator":"!==","left":{"type":"Identifier","name":"__forReturn"},"right":{"type":"Identifier","name":"undefined"}},"consequent":{"type":"BlockStatement","body":[{"type":"ReturnStatement","argument":{"type":"Identifier","name":"__forReturn"}}]},"alternate":null});
+
+		return forVarBlock;
 	}
 
-	parser.yy.createConsoleLogExpression = function createConsoleLogExpression(expression, range){
+	cocoJava.yy.createEnhancedForStatement = function createEnhancedForStatement(typeVar, varName, varRange, arraylist, arraylistRange, forBlock, blockRange, range){
+		//list._arrayList.forEach(function(varName){blocks});
+		var enhancedForExpression = new node("ExpressionStatement");
+		enhancedForExpression.range = range;
+
+		enhancedForExpressionExpression = new node("CallExpression");
+		enhancedForExpressionExpression.range = range;
+
+		enhancedConditional = createTernaryNode(createExpression("instanceof", "BinaryExpression", createIdentifierNode(arraylist,[0,0]),createIdentifierNode("_ArrayList",[0,0]),[0,0]), createMemberExpressionNode(createIdentifierNode(arraylist,arraylistRange),createIdentifierNode("_arraylist",range),range), createIdentifierNode(arraylist, [0,0]), [0,0]);
+
+		enhancedForExpressionExpression.callee = createMemberExpressionNode(enhancedConditional, createIdentifierNode("forEach"),range);
+
+		
+
+		enhancedForExpressionArgument = new node("FunctionExpression");
+		enhancedForExpressionArgument.range = range;
+		enhancedForExpressionArgument.id = null;
+		enhancedForExpressionArgument.params = [];
+		enhancedForExpressionArgument.params.push(createIdentifierNode(varName, varRange));
+		enhancedForExpressionArgument.defaults = [];
+
+		enhancedForExpressionArgumentBlock = new node("BlockStatement");
+		enhancedForExpressionArgumentBlock.range = blockRange;
+		enhancedForExpressionArgumentBlock.body = forBlock;
+
+		enhancedForExpressionArgument.body = enhancedForExpressionArgumentBlock;
+		enhancedForExpressionArgument.generator = false;
+		enhancedForExpressionArgument.expression = false;
+
+		enhancedForExpressionExpression.arguments = [];
+		enhancedForExpressionExpression.arguments.push(enhancedForExpressionArgument);	
+		enhancedForExpression.expression = enhancedForExpressionExpression;
+
+		return enhancedForExpression;
+	}
+
+	cocoJava.yy.createConsoleLogExpression = function createConsoleLogExpression(printType, expression, range){
 		var consoleLogNode = new node("CallExpression");
 		consoleLogNode.range = range;
 		consoleLogNode.arguments = [];
@@ -1255,7 +1822,13 @@ exports.Cashew = function(javaCode){
 
 		var functions = getRuntimeFunctions(range);
 
-		var printProperty = createIdentifierNode("print", range);
+		var printProperty;
+		if(printType == "System.out.print"){
+			printProperty = createIdentifierNode("print", range);
+		}else{
+			printProperty = createIdentifierNode("println", range);
+		}
+			
 
 		callee.object = functions;
 		callee.property = printProperty;
@@ -1266,23 +1839,66 @@ exports.Cashew = function(javaCode){
 		return consoleLogNode;
 	}
 
-	parser.yy.createClassCastNode = function createClassCastNode(type, typeRange, expression, range){
+	cocoJava.yy.createClassCastNode = function createClassCastNode(type, typeRange, expression, range){
 		var classCastNode = new node("CallExpression");
 		classCastNode.range = range;
 		classCastNode.arguments = [];
-		if(type === "int" || type === "double"){
+		if(type === "int" || type === "double" || type === "Object"){
 			classCastNode.arguments.push(getArgumentForName(type, typeRange));
-		}else if(type === "Integer" || type === "Double" || type ===  "String" || type ===  "boolean" || type ===  "Boolean"){
-			throw new SyntaxError("Invalid Class cast");
 		}else{
 			classCastNode.arguments.push(createIdentifierNode(type, typeRange));
 		}
 		classCastNode.arguments.push(expression);
+		classCastNode.arguments.push(getArgumentForRange(range));
 		classCastNode.callee = createMemberExpressionNode(getRuntimeFunctions(range),createIdentifierNode("classCast", range),range, false);
 		return classCastNode;
 	}
 
-	ast = parser.parse(javaCode);
+	//Get line number for when raising errors
+	var lineBreak = /\r\n|[\n\r\u2028\u2029]/g;
+
+	var getLineInfo = function(range) {
+		offset = range[0];
+	    for (var line = 1, cur = 0;;) {
+			lineBreak.lastIndex = cur;
+			var match = lineBreak.exec(javaCode);
+			if (match && match.index < offset) {
+				++line;
+				cur = match.index + match[0].length;
+			} else break;
+		}
+		return {line: line, column: offset - cur};
+	}
+
+	function raise(message, range) {
+		var loc = getLineInfo(range);
+		var err = new SyntaxError(message);
+		err.pos = range[0]; err.loc = loc; err.range = range;
+		throw err;
+	}
+
+	try{
+		ast = cocoJava.parse(javaCode);
+	}catch(err){
+		if(err.hash){
+			err.message = "Unexpected " + err.hash.text;
+			if(err.hash.expected.indexOf("'LINE_TERMINATOR'") >= 0 ){
+				err.message = err.message + " maybe a ';'' is missing!"
+			};
+
+			err.loc = {line: err.hash.line, column: err.hash.loc.first_column};
+			err.range = err.hash.loc.range
+		}
+		throw err;
+	}
+	//Add call to BufferedConsole and print it;
+	var consolePrintNode = new node("ExpressionStatement");
+	var consoleCall = new node("CallExpression");
+	consoleCall.callee  = createMemberExpressionNode(getRuntimeFunctions([0,0]),createIdentifierNode("printLog", [0,0]),[0,0]);
+	consoleCall.arguments = [];
+	consolePrintNode.expression = consoleCall;
+
+	ast.body.push(consolePrintNode);
 
 	return ast;
 }
@@ -1359,7 +1975,6 @@ exports.wrapFunction = wrapFunction = function(ast, functionName, className, sta
 
 	fooBody.body.push(functReturn);
 	fooFunctNode.body = fooBody;
-
 	ast.body = [];
 	ast.body.push(fooFunctNode);
 
@@ -1375,292 +1990,1043 @@ exports.toNode = function(p){
   function node(){}
 }
 
-_Object = (function() {
+exports._Object = _Object = function() {
 
-	var id = 0;
-
-	function generateId() { 
-		return id++; 
-	};
-
-	_Object.prototype.type = "_Object";
-
-	_Object.prototype.id = function() {
-		var newId = generateId();
-
-		this.id = function() { return newId; };
-
-		return newId;
-	};
-
-	function _Object() {
-		__ref = this;
-		this.id = generateId();
-	};
-
-	_Object.prototype.equals = function(other) {
-		return this === other;
-	};
-
-	_Object.prototype.toString= function() {
-		return this.constructor.name + "@" + this.id;
-	};
-
-	return _Object;
-
-})();
-
-_ArrayList = (function() {
-
-	function _ArrayList(type) {
-		this.type = type;
-		this.arraylist = [];
-	}
-
-	_ArrayList.prototype.size = function() {
-		return this.arraylist.length;
-	};
-
-	_ArrayList.prototype.add = function(index, object) {
-		//hacky way so we can have method overload
-		if (object == undefined) {
-			//todo("validate type");
-			this.arraylist.push(index);
-			return true;
-		} else {
-			if (index > 0 && index < this.arraylist.length) {
-				//todo("fixthis");
-				this.arraylist[index] = object;
-				return true;
-			} else {
-				throw new SyntaxError("Index out of bounds Exception");
+			function _Object() {
+				this.__id = generateId();
 			}
+
+			var __id = 0;
+
+			function generateId() { 
+				return __id++; 
+			}
+
+			_Object.prototype.__type = "Object";
+
+			_Object.prototype.__id = function() {
+				var newId = generateId();
+				this.__id = function() { return newId; };
+				return newId;
+			};
+
+			_Object.prototype.equals = function(other) {
+				return this === other;
+			};
+
+			_Object.prototype.toString= function() {
+				if(this.__string){
+					return this.__string;
+				}
+				return this.__type + "@" + this.__id;
+			};
+			
+			return _Object;
+
+		}.call(this);
+
+exports._NotInitialized = _NotInitialized = function() {
+
+			_NotInitialized = function _NotInitialized(name, type, range) {
+				this._name = name;
+				this._initType = type;
+				this._range = range;
+			}
+
+			_NotInitialized.prototype.toString= function() {
+				___JavaRuntime.raise("Variable " + this._name + " might not have been initialized", this._range);
+			};
+			return _NotInitialized;
+
+		}.call(this);
+
+exports.Integer = Integer = function () {
+		    Integer = function Integer(value) {
+		        _Object.call(this);
+		        if(value.constructor == Number){
+		        	this.value = ___JavaRuntime.functions.createNumber(Math.floor(value), "int");
+		        }else{
+		        	throw new SyntaxError("Integer expects an int not " + value.constructor.name);
+		        }
+		    };
+		    Integer.prototype = Object.create(_Object.prototype);
+		    Integer.prototype.__type = 'Integer';
+		    Integer.prototype.intValue = function () {
+		        return this.value;
+		    };
+		    Integer.prototype.toString = function () {
+		        return "" + this.value;
+		    };
+		    return Integer;
+		}.call(this);
+
+exports.Double = Double = function () {
+		    Double = function Double(value) {
+		        _Object.call(this);
+		        if(value.constructor == Number){
+		        	this.value = ___JavaRuntime.functions.createNumber(value, "double");
+		        }else{
+		        	throw new SyntaxError("Double expects an int not " + value.constructor.name);
+		        }
+		    };
+		    Double.prototype = Object.create(_Object.prototype);
+		    Double.prototype.__type = 'Double';
+		    Double.prototype.intValue = function () {
+		        return ___JavaRuntime.functions.createNumber(Math.floor(this.value), "int");
+		    };
+		    Double.prototype.doubleValue = function () {
+		        return this.value;
+		    };
+		    Double.prototype.toString = function () {
+		    	if(this.value%1 != 0){
+		    		return "" + this.value;
+		    	}else{
+		    		return "" + this.value.toFixed(1);
+		    	}
+		    };
+		    return Double;
+		}.call(this);
+
+exports._ArrayList = _ArrayList = function() {
+
+			_ArrayList = function _ArrayList(type) {
+				_Object.call(this);
+				this._type = type;
+				this._arraylist = [];
+			}
+			_ArrayList.prototype = Object.create(_Object.prototype);
+			_ArrayList.prototype.__type = 'ArrayList';
+			_ArrayList.prototype.size = function() {
+				return this._arraylist.length;
+			};
+
+			_ArrayList.prototype.add = function(index, object) {
+				//hacky way so we can have method overload
+				if (object == undefined) {
+					objectType = ___JavaRuntime.functions.determineType(index);
+					if(objectType == "int" && this._type == "Integer"){
+						index = new Integer(index);
+					}
+					if(objectType == "double" && this._type == "Double"){
+						index = new Integer(index);
+					}
+					//updates the type after autoboxing;
+					objectType = ___JavaRuntime.functions.determineType(index);
+					if(objectType !=  this._type){
+						throw new SyntaxError("No suitable 'add' method found for " + objectType);
+					}
+					this._arraylist.push(index);
+					return true;
+				} else {
+					objectType = ___JavaRuntime.functions.determineType(object);
+					if(objectType == "int" && this._type == "Integer"){
+						object = new Integer(object);
+					}
+					if(objectType == "double" && this._type == "Double"){
+						object = new Integer(object);
+					}
+					//updates the type after autoboxing;
+					object = ___JavaRuntime.functions.determineType(object);
+					if(objectType !=  this._type){
+						throw new SyntaxError("No suitable 'add' method found for " + objectType);
+					}
+					if (index > 0 && index < this._arraylist.length) {
+						this._arraylist.splice(index, 0, object);
+						return true;
+					} else {
+						throw new SyntaxError("Index out of bounds Exception!");
+					}
+				}
+			};
+
+			_ArrayList.prototype.get = function(index) {
+				if (index < 0 || index > this._arraylist.length) {
+					throw new SyntaxError("Index out of bounds Exception!");
+				}
+				return this._arraylist[index];
+			};
+
+			_ArrayList.prototype.set = function(index, object) {
+				var old;
+				objectType = ___JavaRuntime.functions.determineType(object);
+				if(objectType == "int" && this._type == "Integer"){
+					object = new Integer(object);
+				}
+				if(objectType == "double" && this._type == "Double"){
+					object = new Integer(object);
+				}
+				//updates the type after autoboxing;
+				objectType = ___JavaRuntime.functions.determineType(object);
+				if(objectType !=  this._type){
+					throw new SyntaxError("No suitable 'set' method found for " + objectType);
+				}
+				if (index < 0 || index > this._arraylist.length) {
+					throw new SyntaxError("Index out of bounds Exception!");
+				}
+				var old = this._arraylist[index];
+				if(___JavaRuntime.functions.determineType(index) == "int" || ___JavaRuntime.functions.determineType(index)== "Integer"){
+					if(___JavaRuntime.functions.determineType(index) == "Integer"){
+						this._arraylist[index.intValue()] = object;
+						}else{
+							this._arraylist[index] = object;
+						}
+						return old;
+				}else{
+					throw new SyntaxError("Incompatible types required: int, found: " + ___JavaRuntime.functions.determineType(index));	
+				}
+			};
+
+			_ArrayList.prototype.remove = function(index) {
+				if (index < 0 || index > this._arraylist.length) {
+					throw new SyntaxError("Index out of bounds Exception!");
+				}
+				return this._arraylist.splice(index,1);
+			};
+
+			return _ArrayList;
+
+		}.call(this);
+
+exports.___JavaRuntime = ___JavaRuntime = {
+	BufferedConsole : "",
+	sourceCode: "",
+	raise : function(message, range) {
+		var offset = range[0];
+		var lineBreak = /\r\n|[\n\r\u2028\u2029]/g;
+	    for (var line = 1, cur = 0;;) {
+			lineBreak.lastIndex = cur;
+			var match = lineBreak.exec(___JavaRuntime.sourceCode);
+			if (match && match.index < offset) {
+				++line;
+				cur = match.index + match[0].length;
+			} else break;
 		}
-	};
-
-	_ArrayList.prototype.get = function(index) {
-		if (index < 0 || index > this.arraylist.length) {
-			throw new SyntaxError("Index out of bounds Exception");
-		}
-		return this.arraylist[index];
-	};
-
-	_ArrayList.prototype.set = function(index, object) {
-		var old;
-		if (index < 0 || index > this.arraylist.length) {
-			throw new SyntaxError("Index out of bounds Exception");
-		}
-		var old = this.arraylist[index];
-		//todo("validate type");
-		this.arraylist[index] = object;
-		return old;
-	};
-
-	_ArrayList.prototype.remove = function(index) {
-		if (index < 0 || index > this.arraylist.length) {
-			throw new SyntaxError("Index out of bounds Exception");
-		}
-		//todo("do the index subtraction");
-
-		return this.arraylist[index];
-	};
-
-	return _ArrayList;
-
-})();
-
-exports.___JavaRuntime = ___JavaRuntime = { 
-	variablesDictionary : [],
-	extend : function(child, parent) { 
-		hasProp = {}.hasOwnProperty;
-		for (var key in parent) { 
-			if (hasProp.call(parent, key)) child[key] = parent[key]; 
-		} 
-		function ctor() { 
-			this.constructor = child; 
-		} 
-		ctor.prototype = parent.prototype; 
-		child.prototype = new ctor(); 
-		child.__super__ = parent.prototype; 
-		
-		return child; 
+		var loc = {line: line, column: offset - cur};
+		var err = new SyntaxError(message);
+		err.pos = range[0]; err.loc = loc; err.range = range;
+		throw err;
 	},
+	loadEnv: function(){
+		___JavaRuntime.BufferedConsole = "";
+		String.prototype.compareTo = function (other){
+			for(var i = 0; i < this.length; i++){
+				if(this[i].charCodeAt(0) != other.charCodeAt(i))
+					return ___JavaRuntime.functions.createNumber(this[i].charCodeAt(0) - other.charCodeAt(i), "int");
 
- 	_Object : _Object,
+			}
+			return ___JavaRuntime.functions.createNumber(this.length - other.length, "int");
+		};
+		String.prototype.compareToIgnoreCase = function (other){
+			for(var i = 0; i < this.length; i++){
+				if(this[i].toLowerCase().charCodeAt(0) != other.toLowerCase().charCodeAt(i))
+					return ___JavaRuntime.functions.createNumber(this[i].toLowerCase().charCodeAt(0) - other.toLowerCase().charCodeAt(i), "int");
 
+			}
+			return ___JavaRuntime.functions.createNumber(this.length - other.length, "int");
+		};
+
+		String.prototype._length = function(){
+			return ___JavaRuntime.functions.createNumber(this.length, "int");
+		};
+		
+		Array.prototype.__defineGetter__("_length", function(){return ___JavaRuntime.functions.createNumber(this.length, "int")});
+	},
+	loadLists : function(){ 
+		
+	},
 	functions : {
+		printLog: function(){
+			if(___JavaRuntime.BufferedConsole != ""){
+				console.log(___JavaRuntime.BufferedConsole);
+			}
+		},
 		print: function(str){
-			console.log(str);
+			___JavaRuntime.BufferedConsole += str;
 		},
-		//FIXME: chaneged validateSet to checkAssignment, most validations will be in the AST soon
-		checkAssignment: function(value, variableName, variable, arrayIndex1, arrayIndex2, ASTNodeID){
+		println: function(str){
+			___JavaRuntime.BufferedConsole += str;
+			___JavaRuntime.BufferedConsole += "\n";
+		},
+		createNumber: function(value, javaType){
+			var _temp = new Number(value);
+			_temp._type = javaType;
+			return _temp;
+		}
+		,
+		//FIXME: validations on arrays pending
+		checkAssignment: function(value, variable, arrayIndex1, arrayIndex2, range, javaType){
 			if(typeof value === "function")
 				value = value();
-			return value;
-		},
-		validateSet: function(value, variableName, variable, arrayIndex1, arrayIndex2, ASTNodeID){
-			if(typeof value === "function")
-				value = value();
-			
-			//Removes the '__' from the variable name
-			var index = parseInt(variableName.substring(2));
-			var varRawType = ___JavaRuntime.variablesDictionary[index].type;
-			var type;
-			//check the type
-			if(___JavaRuntime.variablesDictionary[index].type.indexOf("[][]")>-1){
-				//if either the new value and the variable are arrays
-				if (value.constructor === Array){
-					if(value[0].constructor === Array){
-						if(value instanceof _Object){
-							type = variable.type;
-							type = type + "[][]"
-						}else{
-							type = varRawType;
-						}
-					}else if(arrayIndex1 != undefined && value[0].constructor !== Array){
-						//if the assign contains 1 index the variable can receive an array
-						varRawType = ___JavaRuntime.variablesDictionary[index].type.replace('[','').replace(']','');
-						if(value instanceof _Object){
-							type = variable.type;
-							type = type + "[]"
-						}else{
-							type = varRawType;
-						}
-					}else{
-						throw new SyntaxError("Incompatible types");
-					}
-				} else if (arrayIndex2 != undefined && value.constructor !== Array){
-					//if the assign contains 2 indexes the variable can receive only the basic type
-					varRawType = ___JavaRuntime.variablesDictionary[index].type.replace(/\[/g,'').replace(/\]/g,'');
-				}else{
-					//if the variable is an array but the value is incompatible
-					throw new SyntaxError("Incompatible types");
-				}
-			} else if(___JavaRuntime.variablesDictionary[index].type.indexOf("[]")>-1){
-				//if both value and variables are arrays
-				if (value.constructor === Array && arrayIndex1 == undefined){
-					if(value[0].constructor === Array){
-						throw new SyntaxError("Incompatible types");
-					}
-					if(value instanceof _Object){
-						type = variable.type;
-						type = type + "[]"
-					}else{
-						type = varRawType;
-					}
-				}else if(arrayIndex1 != undefined){
-					//if there's an index the array can recive only the basic type
-
-					varRawType = ___JavaRuntime.variablesDictionary[index].type.replace('[','').replace(']','');
-				}else{
-					throw new SyntaxError("Incompatible types");
-				}
-
-			}
-			
-			if(arrayIndex1){
-				if(typeof arrayIndex1 === "function")
-					arrayIndex1 = arrayIndex1();
-				if(typeof arrayIndex1 != 'number' || arrayIndex1 % 1 !== 0){
-					throw new SyntaxError("Array index must be an integer");
-				}else if(variable.constructor !== Array){
-					throw new SyntaxError("Incompatible types");
-				}else if(arrayIndex1 < 0 || arrayIndex1 >= variable.length){
-					throw new SyntaxError("Array index out of bounds");
-				}
-			}
-			if(arrayIndex2){
-				if(typeof arrayIndex2 === "function")
-					arrayIndex2 = arrayIndex2();
-				if(typeof arrayIndex2 != 'number' || arrayIndex2 % 1 !== 0){
-					throw new SyntaxError("Array index must be an integer");
-				}else if(variable.constructor !== Array){
-					throw new SyntaxError("Incompatible types");
-				}else if(arrayIndex2 < 0 || arrayIndex2 >= variable[arrayIndex1].length){
-					throw new SyntaxError("Array index out of bounds");
-				}
-			}
-			switch (varRawType){
-				case 'int':
-					if (typeof value === 'number'){
-						return Math.floor(value);
-					}
-					throw new SyntaxError("This is not an int maybe a cast is missing");
-					break;
-				case 'double':
-					if (typeof value === 'number'){
-						return value;
-					}
-					throw new SyntaxError("This is not a double maybe a cast is missing");
-					break;
-				case 'boolean':
-					if (typeof value === 'boolean'){
-						return value;
-					}
-					throw new SyntaxError("This is not a boolean maybe a cast is missing");
-					break;
-				case 'String':
-					if (typeof value === 'string'){
-						return value;
-					}
-					throw new SyntaxError("This is not a String maybe a cast is missing");
-					break;
-				case type:
-					return value;
-					break;
-				default:
-					break;
-			}
-		},
-		validateIndex: function(value){
-			if(typeof value === "function")
-				value = value();
-			if (typeof value === 'number'){
-						if (value % 1 === 0){
-							return value;
-						}else{
-							throw new SyntaxError("Possible loss of precision, received double, expected int");
-						}
-			}
-			if(value instanceof _Object){
-				throw new SyntaxError("Incompatible types, received "+ value.type +", expected int");
-			}
-			throw new SyntaxError("Incompatible types, received "+ typeof value  +", expected int");
-
-		},
-		classCast: function(type, value){
-			if(typeof type === "string"){
-				if (typeof value === "number"){
-						if(type === "int"){
-							return Math.floor(value);
-						}else{
-							return value;
-						}
-					}
+			var tValue =  ___JavaRuntime.functions.determineType(value);
+			var tVariable;
+			if(javaType){
+				tVariable = javaType;
 			}else{
-				if(value instanceof type){
-					return type;
+				if(arrayIndex2){
+					tVariable = ___JavaRuntime.functions.determineType(variable[arrayIndex1][arrayIndex2]);	
+				}else if(arrayIndex1){
+					tVariable = ___JavaRuntime.functions.determineType(variable[arrayIndex1]);
 				}else{
-					throw new SyntaxError("Invalid Class cast");
+					tVariable = ___JavaRuntime.functions.determineType(variable);
+				}	
+			}
+			if(tValue == tVariable){
+				//if both have the same type just return the value
+				return value;
+			}else{
+				if(tVariable == "Object"){
+					//if primitives, wrap them into objects
+					if(tValue == "int"){
+						return new Integer(value);
+					}else if (tVariable == "double"){
+						return new Double(value);
+					}else{
+						return value;
+					}
+				}
+				//Autobox
+				if(tVariable == "int" && tValue == "Integer"){
+					return value.intValue();
+				}else if(tVariable == "Integer" && tValue == "int"){
+					return new Integer(value);
+				}else if(tVariable == "double" && tValue == "Integer"){
+					var _temp = value.intValue();
+					_temp._type = "double";
+					return _temp;
+				}else if(tVariable == "double" && tValue == "int"){
+					value._type = "double";
+					return value;
+				}else if(tVariable == "double" && tValue == "Double"){
+					return value.doubleValue();
+				}else if(tVariable == "Double" && tValue == "Integer"){
+					return new Double(value.intValue());
+				}else if(tVariable == "Double" && tValue == "int"){
+					return new Double(value);
+				}else if(tVariable == "Double" && tValue == "double"){
+					return new Double(value);
+				}
+			}
+			if(tVariable == "?" || tValue == "?"){
+				//if variable has a wildcard type, we cant validate
+				return value;
+			}
+			___JavaRuntime.raise("Incompatible types required " + tVariable + " found " + tValue, range);
+		},
+		determineType: function(value){
+			if(value == undefined){
+				return undefined;
+			}
+			if(value instanceof _NotInitialized){
+				return value._initType;
+			}
+			
+			if (value.constructor == Array){
+				return "?";
+			}else{
+				//if it's not an array it could be an integer, double, string, userType
+				if(value.constructor == Number){
+					return value._type;
+				}else if(value.constructor == String){
+					return "String";
+				}else if(value instanceof _Object){
+					if(value.__type){
+						return value.__type;
+					}
+				}
+			}
+			if(typeof(value) === "boolean"){
+				return "boolean"
+			}
+			//if cant check the type its wildcard type
+			return "?";
+		},
+		findMethodName: function(methodSignature, args, possibleFunctions){
+			var argTypes = [];
+			for (var i = 0; i < args.length; i++) {
+				argTypes.push( ___JavaRuntime.functions.determineType(args[i]));
+			};
+			var typeMatcher = function(arg1, arg2){
+				if(arg1 == "Object"){
+					arg1 = "_Object";
+				}
+				if(arg2 == "Object"){
+					arg2 = "_Object";
+				}
+				if(arg1 == arg2){
+					return 0;
+				}
+				if(arg1 == "int"){
+					if(arg2 == "Integer" ||arg2 == "double" || arg2 == "_Object"){
+						return 1;
+					}else{
+						return (-256);
+					}
+				}
+				if(arg1 == "double"){
+					if(arg2 == "Double" || arg2 == "_Object"){
+						return 1;
+					}else{
+						return (-256);
+					}
+				}
+				if(arg1 == "Integer"){
+					if(arg2 == "int" || arg2 == "double"){
+						return 1;
+					}else{
+						return (-256);
+					}
+				}
+				if(arg1 == "Double"){
+					if(arg2 == "double"){
+						return 1;
+					}else{
+						return (-256);
+					}
+				}
+				if(arg2 == "int" || arg2 == "double"){
+					return (-256);
+				}
+				if(eval(arg1 + ".prototype") instanceof eval(arg2)){
+					return 1;
+				}
+				return (-256);
+			}
+			var reducedByNumber = [];
+			for (var i = 0; i < possibleFunctions.length; i++) {
+				if(possibleFunctions[i].length == argTypes.length){
+					reducedByNumber.push(possibleFunctions[i]);
+				}
+			};
+			if(reducedByNumber.length == 0){
+				___JavaRuntime.raise("No suitable "+ methodSignature + " method found for " + argTypes, [0,0]);
+			}else{
+				var exactMatch = undefined;
+				var reducedByPrototype = [];
+				for (var i = 0; i < reducedByNumber.length; i++) {
+					var sum = 0;
+					for (var j = 0; j < argTypes.length; j++) {
+						sum += typeMatcher(argTypes[j], reducedByNumber[i][j]);
+					};
+					if(sum == 0){
+						exactMatch = reducedByNumber[i];
+						break;
+					}else if(sum > 0){
+						reducedByPrototype.push(reducedByNumber[i]);
+					}
+				};
+				if(exactMatch){
+					//no cast needed
+					return "__" + methodSignature + possibleFunctions.indexOf(exactMatch);
+				}else if(reducedByPrototype.length > 0){
+					//cast needed
+					//FIXME: need to check the precedence of variables
+					//picking the first one;
+					return "__" + methodSignature + possibleFunctions.indexOf(reducedByPrototype[0]);
+				}else{
+					___JavaRuntime.raise("No suitable "+ methodSignature + " method found for " + argTypes, [0,0]);
+				}
+			}
+			___JavaRuntime.raise("No suitable "+ methodSignature + " method found for " + argTypes, [0,0]);
+		},
+		getProperArgs: function(methodSignature, args, possibleFunctions){
+			var argTypes = [];
+			for (var i = 0; i < args.length; i++) {
+				argTypes.push( ___JavaRuntime.functions.determineType(args[i]));
+			};
+			var typeMatcher = function(arg1, arg2){
+				if(arg1 == "Object"){
+					arg1 = "_Object";
+				}
+				if(arg2 == "Object"){
+					arg2 = "_Object";
+				}
+				if(arg1 == arg2){
+					return 0;
+				}
+				if(arg1 == "int"){
+					if(arg2 == "Integer" ||arg2 == "double" || arg2 == "_Object"){
+						return 1;
+					}else{
+						return (-256);
+					}
+				}
+				if(arg1 == "double"){
+					if(arg2 == "Double" || arg2 == "_Object"){
+						return 1;
+					}else{
+						return (-256);
+					}
+				}
+				if(arg1 == "Integer"){
+					if(arg2 == "int" || arg2 == "double"){
+						return 1;
+					}else{
+						return (-256);
+					}
+				}
+				if(arg1 == "Double"){
+					if(arg2 == "double"){
+						return 1;
+					}else{
+						return (-256);
+					}
+				}
+				if(arg2 == "int" || arg2 == "double"){
+					return (-256);
+				}
+				if(eval(arg1 + ".prototype") instanceof eval(arg2)){
+					return 1;
+				}
+				return (-256);
+			}
+			var reducedByNumber = [];
+			for (var i = 0; i < possibleFunctions.length; i++) {
+				if(possibleFunctions[i].length == argTypes.length){
+					reducedByNumber.push(possibleFunctions[i]);
+				}
+			};
+			if(reducedByNumber.length == 0){
+				___JavaRuntime.raise("No suitable "+ methodSignature + " method found for " + argTypes, [0,0]);
+			}else{
+				var exactMatch = undefined;
+				var reducedByPrototype = [];
+				for (var i = 0; i < reducedByNumber.length; i++) {
+					var sum = 0;
+					for (var j = 0; j < argTypes.length; j++) {
+						sum += typeMatcher(argTypes[j], reducedByNumber[i][j]);
+					};
+					if(sum == 0){
+						exactMatch = reducedByNumber[i];
+						break;
+					}else if(sum > 0){
+						reducedByPrototype.push(reducedByNumber[i]);
+					}
+				};
+				if(exactMatch){
+					var retArgs = [];
+					//no cast needed
+					for (var i = 0; i < exactMatch.length; i++) {
+						retArgs.push(args[i]);
+					};
+					return retArgs;
+				}else{
+					//cast needed
+					var retArgs = [];
+					//FIXME: need to check the precedence of variables
+					//picking the first one;
+					for (var i = 0; i < reducedByPrototype[0].length; i++) {
+
+						if(reducedByPrototype[0][i] == "int" || reducedByPrototype[0][i] == "Object" || reducedByPrototype[0][i] == "double"){
+							retArgs.push(___JavaRuntime.functions.classCast(reducedByPrototype[0][i], args[i], [0,0]));
+						}else{
+							retArgs.push(___JavaRuntime.functions.classCast(eval(reducedByPrototype[0][i]), args[i], [0,0]));
+						}
+					};
+					return retArgs;
+				}
+			}
+		},
+		createNullArrayForIndexes: function(index1, range, index2, arrayType){
+			if(typeof index1 === "function"){
+				index1 = index1();
+			}
+			tIndex1 = ___JavaRuntime.functions.determineType(index1);
+			if(tIndex1 != "int"){
+				if(tIndex1 != "Integer"){
+					___JavaRuntime.raise("Possible loss of precision, received " + tIndex1 + ", expected int");
+				}
+				index1 = index1.intValue;
+			}
+			var type = index2;
+			if(arguments.length == 4){
+				type = arrayType;
+				if(typeof index2 === "function"){
+					index2 = index2();
+				}
+				tIndex2 = ___JavaRuntime.functions.determineType(index2);
+				if(tIndex2 != "int"){
+					if(tIndex2 != "Integer"){
+						___JavaRuntime.raise("Possible loss of precision, received " + tIndex2 + ", expected int");
+					}
+					index2 = index2.intValue;
+				}
+			}
+			var _tempArray = [];
+			for (var i = 0; i < index1; i++) {
+				if(index2){
+					var _tempArray2 = [];
+					for (var j = 0; j < index2; j++) {
+						if(type){
+							_tempArray2.push(new _NotInitialized("arr",type.replace("[","").replace("[","").replace("]","").replace("]",""),range));
+						}else{
+							_tempArray2.push(new _NotInitialized("arr","?",range));
+						}
+						
+					};
+					_tempArray.push(_tempArray2);
+				}else{
+					if(type){
+						_tempArray.push(new _NotInitialized("arr",type.replace("[","").replace("]",""),range));
+					}else{
+						_tempArray.push(new _NotInitialized("arr","?",range));
+					}
+					
+				}
+			};
+			return _tempArray;	
+		},
+		classCast: function(type, arg, range){
+			var cloneObject = function(obj) {
+			    if(obj.constructor == Number){
+			    	var clone = new Number(obj);
+			    	if(obj._type){
+			        	clone._type = obj._type;
+			        }
+			        return clone;
+			    }
+			    if(obj.constructor == String){
+			    	var clone = obj;
+			        return clone;
+			    }
+			    var clone = new obj.constructor();
+			    for(var i in obj) {
+			        if(typeof(obj[i])=="object"  && obj[i] != null){
+			            clone[i] = cloneObject(obj[i]);
+			        }else{
+			            clone[i] = obj[i];
+			        }
+			    }
+			    clone.__proto__ = obj.__proto__;
+			    return clone;
+			}
+			var value = cloneObject(arg);
+			if(type.constructor == String){
+				if (value.constructor == Number){
+						if(type === "int"){
+							return ___JavaRuntime.functions.createNumber(Math.floor(value), "int");
+						}else if (type === "double"){
+							return ___JavaRuntime.functions.createNumber(value, "double");
+						}
+					}
+				if(value instanceof Integer){
+					if(type === "int"){
+						return value.intValue();
+					}else if (type === "double"){
+						return ___JavaRuntime.functions.createNumber(value.intValue(), "double");
+					}
+				}
+				if(value instanceof _Object && value.hasOwnProperty("value")){
+					if(type === "int"){
+						return ___JavaRuntime.functions.createNumber(Math.floor(value.value),"int");
+					}else if (type === "double"){
+						return ___JavaRuntime.functions.createNumber(value.value, "double");
+					}
+				}
+				if(value instanceof Double){
+					if(type === "int"){
+						return ___JavaRuntime.functions.createNumber(Math.floor(value.doubleValue()), "int");
+					}else if (type === "double"){
+						return value.doubleValue();
+					}
+				}
+				if(type == "Object"){
+					if(value instanceof _Object){
+						//if it's an object instance convert back to object
+						value.__type = "Object";
+						value.__proto__ = Object.create(_Object.prototype).__proto__;
+						return value;
+					}else{
+						//if it isn't an object and it's a number wrap it to it's class
+						if (value.constructor == Number){
+							if(value._type == "double"){
+								return  ___JavaRuntime.functions.classCast("Object",___JavaRuntime.functions.classCast(Double, value, range),range);
+							}else if(value._type == "int"){
+								return  ___JavaRuntime.functions.classCast("Object",___JavaRuntime.functions.classCast(Integer, value, range),range);
+							}
+						}
+						if (value.constructor == String){
+							var __temp;
+							__temp = new _Object();
+							__temp.__string = value;
+							return __temp
+						}
+					}
+				}
+				___JavaRuntime.raise("Incompatible types " + value.__type + " cannot be cast to " + type, range);
+			}
+			else if(type == String){
+				if(value instanceof _Object){
+					if(value.hasOwnProperty("__string")){
+						return value.__string;
+					}else{
+						___JavaRuntime.raise("Invalid Class cast " + value.__type + " cannot be cast to String", range);
+					}
+				}else{
+					return ""+ value;
+				}
+			}
+			else if(value.constructor == Number){
+				if(type == Integer){
+					return new Integer(value);
+				}
+				if(type == Double){
+					return new Double(value);
+				}
+			}
+			else{
+				if(value instanceof _Object){
+					value.__proto__ = Object.create(type.prototype).__proto__;
+					value.__type = value.__proto__.__type;
+					return value;
+				}else {
+					___JavaRuntime.raise("Invalid Class cast", range);
 				}
 			}
 		}
 	},
 	ops : {
+		eq: function(arg1, arg2){
+			if(arg1 == undefined && arg2 == undefined){
+				//if both undefined always true
+				return true;
+			}else if(arg1 == undefined || arg2 == undefined){
+				//if at least one undefined always false
+				return false;
+			}else if(arg1.constructor == Number && arg2.constructor == Number){
+				return Number(arg1) == Number(arg2);
+			}else{
+				return arg1 == arg2;
+			}
+		},
+		neq: function(arg1, arg2){
+			if(arg1 == undefined && arg2 == undefined){
+				//if both undefined always false
+				return false;
+			}else if(arg1 == undefined || arg2 == undefined){
+				//if at least one undefined always true
+				return true;
+			}else if(arg1.constructor == Number && arg2.constructor == Number){
+				return Number(arg1) != Number(arg2);
+			}else{
+				return arg1 != arg2;
+			}
+		},
+		//Needed since switch in javascript does '===' and can't compare object numbers
+		fixSwitch: function(arg, range){
+			tArg = ___JavaRuntime.functions.determineType(arg);
+			if(tArg == "String"){
+				return arg
+			}else if(tArg == "Integer"){
+				return Number(arg.intValue());
+			}else if (tArg == "int"){
+				return Number(arg);
+			}
+			___JavaRuntime.raise("Switch requires int or String but got " + tArg, range);
+		},
 		add: function(arg1, arg2){
-			return arg1 + arg2;
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "String" && tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '+' got " + tArg1);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "String"){
+				return arg1 + arg2;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 + arg2));
+			}
+			if(tArg1 == "Double"){
+				return new Double(arg1 + arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 + arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 + arg2, "double");
 		},
 		sub: function(arg1, arg2){
-			return arg1 - arg2;
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '-' got " + tArg1);
+			}
+			if(tArg2 != "int" && tArg2 != "double" && tArg2 != "Integer"  && tArg2 != "Double"){
+				throw new SyntaxError("Bad operand type for '-' got " + tArg2);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 - arg2));
+			}
+			if(tArg1 == "Double" ){
+				return new Double(arg1 - arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 - arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 - arg2, "double");
 		},
 		mul: function(arg1, arg2){
-			return arg1 * arg2;
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '*' got " + tArg1);
+			}
+			if(tArg2 != "int" && tArg2 != "double" && tArg2 != "Integer"  && tArg2 != "Double"){
+				throw new SyntaxError("Bad operand type for '*' got " + tArg2);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 * arg2));
+			}
+			if(tArg1 == "Double" ){
+				return new Double(arg1 * arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 * arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 * arg2, "double");
 		},
 		div: function(arg1, arg2){
-			return arg1 / arg2;
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '/' got " + tArg1);
+			}
+			if(tArg2 != "int" && tArg2 != "double" && tArg2 != "Integer"  && tArg2 != "Double"){
+				throw new SyntaxError("Bad operand type for '/' got " + tArg2);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 / arg2));
+			}
+			if(tArg1 == "Double" ){
+				return new Double(arg1 / arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 / arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 / arg2, "double");
 		},
 		mod: function(arg1, arg2){
-			return arg1 % arg2;
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg1);
+			}
+			if(tArg2 != "int" && tArg2 != "double" && tArg2 != "Integer"  && tArg2 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg2);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 % arg2));
+			}
+			if(tArg1 == "Double" ){
+				return new Double(arg1 % arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 % arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 % arg2, "double");
+		},
+		rhs: function(arg1, arg2){
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg1);
+			}
+			if(tArg2 != "int" && tArg2 != "double" && tArg2 != "Integer"  && tArg2 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg2);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 >> arg2));
+			}
+			if(tArg1 == "Double"){
+				return new Double(arg1 >> arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 >> arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 >> arg2, "double");
+		},
+		zrhs: function(arg1, arg2){
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg1);
+			}
+			if(tArg2 != "int" && tArg2 != "double" && tArg2 != "Integer"  && tArg2 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg2);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 >>> arg2));
+			}
+			if(tArg1 == "Double"){
+				return new Double(arg1 >>> arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 >>> arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 >>> arg2, "double");
+		},
+		lhs: function(arg1, arg2){
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg1);
+			}
+			if(tArg2 != "int" && tArg2 != "double" && tArg2 != "Integer"  && tArg2 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg2);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 << arg2));
+			}
+			if(tArg1 == "Double"){
+				return new Double(arg1 << arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 << arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 << arg2, "double");
+		},
+		xor: function(arg1, arg2){
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg1);
+			}
+			if(tArg2 != "int" && tArg2 != "double" && tArg2 != "Integer"  && tArg2 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg2);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 ^ arg2));
+			}
+			if(tArg1 == "Double"){
+				return new Double(arg1 ^ arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 ^ arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 ^ arg2, "double");
+		},
+		iand: function(arg1, arg2){
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg1);
+			}
+			if(tArg2 != "int" && tArg2 != "double" && tArg2 != "Integer"  && tArg2 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg2);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 & arg2));
+			}
+			if(tArg1 == "Double"){
+				return new Double(arg1 & arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 & arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 & arg2, "double");
+		},
+		ior: function(arg1, arg2){
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			tArg2 = ___JavaRuntime.functions.determineType(arg2);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg1);
+			}
+			if(tArg2 != "int" && tArg2 != "double" && tArg2 != "Integer"  && tArg2 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg2);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg2 == "Integer" || tArg2 == "Double"){
+				arg2 = arg2.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(arg1 | arg2));
+			}
+			if(tArg1 == "Double"){
+				return new Double(arg1 | arg2);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(arg1 | arg2), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(arg1 | arg2, "double");
+		},
+		nay: function(arg1){
+			tArg1 = ___JavaRuntime.functions.determineType(arg1);
+			if(tArg1 != "int" && tArg1 != "double" && tArg1 != "Integer"  && tArg1 != "Double"){
+				throw new SyntaxError("Bad operand type for '%' got " + tArg1);
+			}
+			if(tArg1 == "Integer" || tArg1 == "Double"){
+				arg1 = arg1.value;
+			}
+			if(tArg1 == "Integer"){
+				return new Integer(Math.floor(~arg1));
+			}
+			if(tArg1 == "Double"){
+				return new Double(~arg1);
+			}
+			if(tArg1 == "int"){
+				return ___JavaRuntime.functions.createNumber(Math.floor(~arg1), "int");
+			}
+			return ___JavaRuntime.functions.createNumber(~arg1, "double");
 		},
 	},
 }
